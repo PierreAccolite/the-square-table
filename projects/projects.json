@@ -6,5 +6,13 @@
     "description": "Build the shared interface that will support future GPT + Grok + Pierre projects.",
     "path": "projects/square-table-ui",
     "preview": null
+  },
+  {
+    "id": "square-table-extension",
+    "name": "Project 002 — Square Table Browser Extension",
+    "status": "ACTIVE",
+    "description": "Browser-level mail badge and reliable focus/reuse of GPT, Grok, Square Table and GitHub tabs.",
+    "path": "projects/square-table-extension",
+    "preview": null
   }
 ]
