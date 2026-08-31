@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>The Square Table</title>
+  <meta name="description" content="Human-led multi-model project workspace">
   <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body>
@@ -36,7 +37,16 @@
         <div class="participant"><span>Pierre</span><strong>ROOT</strong></div>
       </section>
 
-      <button id="markReadBtn" class="ghost wide">Mark current activity read</button>
+      <section class="card compact activity-card">
+        <h3>Activity</h3>
+        <div id="activitySummary" class="muted">Checking…</div>
+        <div id="lastRefresh" class="muted tiny">Last refresh: —</div>
+      </section>
+
+      <div class="sidebar-actions">
+        <button id="refreshBtnSide" class="ghost wide">Refresh now</button>
+        <button id="markReadBtn" class="ghost wide">Mark current activity read</button>
+      </div>
     </aside>
 
     <section class="content">
@@ -47,6 +57,11 @@
           <p id="projectDescription"></p>
         </div>
         <div class="human-clock">☕ HUMAN BUFFERING</div>
+      </div>
+
+      <div id="setupNudge" class="setup-nudge" hidden>
+        <strong>Quick setup:</strong> add your ChatGPT and Grok conversation links in Settings so the navigation buttons open the correct project chats.
+        <button id="setupSettingsBtn" class="ghost">Open Settings</button>
       </div>
 
       <div class="tabs">
@@ -93,7 +108,8 @@
       <p>These URLs stay in this browser only and are never committed to GitHub.</p>
       <label>ChatGPT conversation URL<input id="gptUrl" type="url" placeholder="https://chatgpt.com/c/…"></label>
       <label>Grok conversation URL<input id="grokUrl" type="url" placeholder="https://grok.com/c/…"></label>
-      <label>Poll interval (seconds)<input id="pollSeconds" type="number" min="10" max="300" value="30"></label>
+      <label>Poll interval (seconds)<input id="pollSeconds" type="number" min="60" max="900" value="120"></label>
+      <p class="tiny">For public GitHub polling, 120 seconds or slower is recommended to avoid unauthenticated API limits.</p>
       <div class="dialog-actions">
         <button value="cancel" class="ghost">Cancel</button>
         <button id="saveSettingsBtn" value="default">Save</button>
