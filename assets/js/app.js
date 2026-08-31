@@ -6,12 +6,15 @@ const $ = selector => document.querySelector(selector);
 let projects = [];
 let current = null;
 let timer = null;
+let rateLimitUntil = 0;
 
 const settingsKey = 'squareTable.settings';
 const seenKey = project => `squareTable.seen.${project.id}`;
+const cacheKey = (project, area) => `squareTable.cache.${project.id}.${area}`;
 
 function settings() {
-  return JSON.parse(localStorage.getItem(settingsKey) || '{}');
+  try { return JSON.parse(localStorage.getItem(settingsKey) || '{}'); }
+  catch { return {}; }
 }
 
 function saveSettings(value) {
@@ -31,22 +34,37 @@ function saveSeen(project, seen) {
   localStorage.setItem(seenKey(project), JSON.stringify([...seen]));
 }
 
+function saveCache(project, area, value) {
+  try {
+    localStorage.setItem(cacheKey(project, area), JSON.stringify({ savedAt: Date.now(), value }));
+  } catch {}
+}
+
+function loadCache(project, area) {
+  try { return JSON.parse(localStorage.getItem(cacheKey(project, area)) || 'null'); }
+  catch { return null; }
+}
+
 async function gh(path) {
+  const value = settings();
+  const headers = { Accept: 'application/vnd.github+json' };
+  if (value.githubToken) headers.Authorization = `Bearer ${value.githubToken}`;
+
   const response = await fetch(`${API}${path}?ref=main`, {
-    headers: { Accept: 'application/vnd.github+json' },
+    headers,
     cache: 'no-store'
   });
 
   if (response.status === 403 || response.status === 429) {
     const reset = Number(response.headers.get('x-ratelimit-reset') || 0);
-    const retry = reset ? new Date(reset * 1000).toLocaleTimeString() : 'later';
-    throw new Error(`GitHub rate limit reached. Retry after ${retry}.`);
+    rateLimitUntil = reset ? reset * 1000 : Date.now() + 15 * 60 * 1000;
+    const retry = new Date(rateLimitUntil).toLocaleTimeString();
+    const error = new Error(`GitHub rate limit reached. Retry after ${retry}.`);
+    error.rateLimited = true;
+    throw error;
   }
 
-  if (!response.ok) {
-    throw new Error(`GitHub ${response.status} for ${path}`);
-  }
-
+  if (!response.ok) throw new Error(`GitHub ${response.status} for ${path}`);
   return response.json();
 }
 
@@ -57,12 +75,8 @@ async function raw(path) {
 }
 
 function esc(value = '') {
-  return value.replace(/[&<>"']/g, char => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
+  return String(value).replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[char]));
 }
 
@@ -85,10 +99,20 @@ function setLastRefresh(text) {
   $('#lastRefresh').textContent = `Last refresh: ${text}`;
 }
 
+function showStale(message = '') {
+  $('#staleBanner').hidden = false;
+  $('#staleBannerText').textContent = message || 'Showing cached project data.';
+}
+
+function hideStale() {
+  $('#staleBanner').hidden = true;
+}
+
 function openSettings() {
   const value = settings();
   $('#gptUrl').value = value.gptUrl || '';
   $('#grokUrl').value = value.grokUrl || '';
+  $('#githubToken').value = value.githubToken || '';
   $('#pollSeconds').value = value.pollSeconds || 120;
   $('#settingsDialog').showModal();
 }
@@ -113,7 +137,16 @@ async function selectProject(id) {
   $('#projectName').textContent = current.name;
   $('#projectStatus').textContent = current.status;
   $('#projectDescription').textContent = current.description;
-  $('#previewFrame').src = current.preview || './';
+
+  if (current.preview) {
+    $('#previewFrame').hidden = false;
+    $('#previewFrame').src = current.preview;
+    $('#previewEmpty').hidden = true;
+  } else {
+    $('#previewFrame').hidden = true;
+    $('#previewFrame').removeAttribute('src');
+    $('#previewEmpty').hidden = false;
+  }
 
   await Promise.all([
     loadMessages(),
@@ -123,117 +156,153 @@ async function selectProject(id) {
   ]);
 }
 
-async function loadMessages() {
+async function fetchMessageRecords() {
+  const files = (await gh(`${current.path}/messages`))
+    .filter(item => item.type === 'file' && item.name.endsWith('.md'))
+    .sort((a, b) => numericMessageOrder(b.name) - numericMessageOrder(a.name) || b.name.localeCompare(a.name));
+
+  const visible = files.slice(0, 12);
+  const records = [];
+  for (const file of visible) {
+    records.push({
+      name: file.name,
+      path: file.path,
+      sha: file.sha,
+      text: await raw(file.path)
+    });
+  }
+  return { records, total: files.length };
+}
+
+function renderMessages(payload, stale = false) {
   const box = $('#messages');
-  try {
-    const files = (await gh(`${current.path}/messages`))
-      .filter(item => item.type === 'file' && item.name.endsWith('.md'))
-      .sort((a, b) => numericMessageOrder(b.name) - numericMessageOrder(a.name) || b.name.localeCompare(a.name));
+  const seen = getSeen(current);
+  const cards = [];
+  const unseen = [];
+  let gptUnread = 0;
+  let grokUnread = 0;
 
-    const seen = getSeen(current);
-    const visible = files.slice(0, 12);
-    const cards = [];
-    const unseen = [];
-    let gptUnread = 0;
-    let grokUnread = 0;
+  for (const file of payload.records) {
+    const to = meta(file.text, 'To');
+    const from = meta(file.text, 'From');
+    const type = meta(file.text, 'Type');
+    const isUnread = !seen.has(file.sha);
 
-    for (const file of visible) {
-      const text = await raw(file.path);
-      const to = meta(text, 'To');
-      const from = meta(text, 'From');
-      const type = meta(text, 'Type');
-      const isUnread = !seen.has(file.sha);
-
-      if (isUnread) {
-        unseen.push(file);
-        if (/GPT/i.test(to)) gptUnread++;
-        if (/GROK/i.test(to)) grokUnread++;
-      }
-
-      const githubUrl = `https://github.com/${REPO}/blob/main/${file.path}`;
-      cards.push(`
-        <article class="message-card ${isUnread ? 'new' : ''}">
-          <div class="message-meta">
-            <span>${esc(from)} → ${esc(to)}</span>
-            <span>${esc(type)} · ${esc(file.name)}</span>
-          </div>
-          <div class="message-title">${esc(messageTitle(text, file.name))}</div>
-          <div class="message-body">${esc(text)}</div>
-          <div class="message-actions">
-            <a href="${githubUrl}" target="_blank" rel="noopener">Open on GitHub</a>
-          </div>
-        </article>`);
+    if (isUnread) {
+      unseen.push(file);
+      if (/GPT/i.test(to)) gptUnread++;
+      if (/GROK/i.test(to)) grokUnread++;
     }
 
-    box.innerHTML = cards.join('') || '<p class="muted">No project messages yet.</p>';
+    const githubUrl = `https://github.com/${REPO}/blob/main/${file.path}`;
+    cards.push(`
+      <article class="message-card ${isUnread ? 'new' : ''}">
+        <div class="message-meta">
+          <span>${esc(from)} → ${esc(to)}</span>
+          <span>${esc(type)} · ${esc(file.name)}</span>
+        </div>
+        <div class="message-title">${esc(messageTitle(file.text, file.name))}</div>
+        <div class="message-body">${esc(file.text)}</div>
+        <div class="message-actions"><a href="${githubUrl}" target="_blank" rel="noopener">Open on GitHub</a></div>
+      </article>`);
+  }
 
-    const unreadCount = unseen.length;
-    $('#mailBadge').textContent = unreadCount ? `📬 ${unreadCount} new message${unreadCount === 1 ? '' : 's'}` : '✓ Mail up to date';
-    $('#mailBadge').classList.toggle('new', unreadCount > 0);
-    $('#gptMail').textContent = gptUnread ? `MAIL ${gptUnread}` : 'READY';
-    $('#grokMail').textContent = grokUnread ? `MAIL ${grokUnread}` : 'READY';
-    $('#activitySummary').textContent = unreadCount
-      ? `${unreadCount} unread project message${unreadCount === 1 ? '' : 's'} · GPT ${gptUnread} · Grok ${grokUnread}`
-      : `No unread project mail · showing newest ${visible.length} of ${files.length}`;
+  box.innerHTML = cards.join('') || '<p class="muted">No project messages yet.</p>';
+  box.dataset.visibleShas = JSON.stringify(payload.records.map(file => file.sha));
 
-    box.dataset.visibleShas = JSON.stringify(visible.map(file => file.sha));
+  const unreadCount = unseen.length;
+  $('#mailBadge').textContent = stale
+    ? `⚠ Cached mail · ${unreadCount} unread`
+    : unreadCount ? `📬 ${unreadCount} new message${unreadCount === 1 ? '' : 's'}` : '✓ Mail up to date';
+  $('#mailBadge').classList.toggle('new', unreadCount > 0);
+  $('#gptMail').textContent = stale ? (gptUnread ? `MAIL ${gptUnread}` : 'CACHED') : (gptUnread ? `MAIL ${gptUnread}` : 'READY');
+  $('#grokMail').textContent = stale ? (grokUnread ? `MAIL ${grokUnread}` : 'CACHED') : (grokUnread ? `MAIL ${grokUnread}` : 'READY');
+  $('#activitySummary').textContent = `${stale ? 'Cached · ' : ''}${unreadCount ? `${unreadCount} unread · GPT ${gptUnread} · Grok ${grokUnread}` : `No unread project mail · showing newest ${payload.records.length} of ${payload.total}`}`;
+  $('#markReadBtn').disabled = payload.records.length === 0;
+}
+
+async function loadMessages() {
+  try {
+    const payload = await fetchMessageRecords();
+    saveCache(current, 'messages', payload);
+    renderMessages(payload, false);
+    hideStale();
     setLastRefresh(new Date().toLocaleTimeString());
   } catch (error) {
-    box.innerHTML = `<p class="muted">${esc(error.message)}</p>`;
-    $('#mailBadge').textContent = 'Mail check failed';
-    $('#activitySummary').textContent = error.message;
-    setLastRefresh('failed');
+    const cached = loadCache(current, 'messages');
+    if (cached?.value) {
+      renderMessages(cached.value, true);
+      const age = new Date(cached.savedAt).toLocaleTimeString();
+      showStale(`${error.message} Showing cached mail from ${age}.`);
+      setLastRefresh(`cached ${age}`);
+    } else {
+      $('#messages').innerHTML = `<p class="muted">${esc(error.message)}</p>`;
+      $('#mailBadge').textContent = 'Mail unavailable';
+      $('#gptMail').textContent = 'UNKNOWN';
+      $('#grokMail').textContent = 'UNKNOWN';
+      $('#activitySummary').textContent = error.message;
+      $('#markReadBtn').disabled = true;
+      showStale(error.message);
+      setLastRefresh('failed');
+    }
+    if (error.rateLimited) schedule();
   }
 }
 
 async function loadMarkdown(name, target) {
-  try {
-    $(target).textContent = await raw(`${current.path}/${name}`);
-  } catch (error) {
-    $(target).textContent = error.message;
-  }
+  try { $(target).textContent = await raw(`${current.path}/${name}`); }
+  catch (error) { $(target).textContent = error.message; }
+}
+
+async function fetchDirectoryRecords(name) {
+  const files = (await gh(`${current.path}/${name}`))
+    .filter(item => item.type === 'file' && item.name.endsWith('.md'));
+  const records = [];
+  for (const file of files) records.push({ name: file.name, path: file.path, text: await raw(file.path) });
+  return records;
+}
+
+function renderDirectory(records, target, stale = false) {
+  const box = $(target);
+  box.innerHTML = records.map(file => `
+    <article class="file-card">
+      <div class="message-title">${esc(file.name)}${stale ? ' · CACHED' : ''}</div>
+      <div class="message-body">${esc(file.text)}</div>
+    </article>`).join('') || '<p class="muted">None yet.</p>';
 }
 
 async function loadDirectory(name, target) {
-  const box = $(target);
   try {
-    const files = (await gh(`${current.path}/${name}`))
-      .filter(item => item.type === 'file' && item.name.endsWith('.md'));
-
-    const cards = [];
-    for (const file of files) {
-      const text = await raw(file.path);
-      cards.push(`
-        <article class="file-card">
-          <div class="message-title">${esc(file.name)}</div>
-          <div class="message-body">${esc(text)}</div>
-        </article>`);
-    }
-    box.innerHTML = cards.join('') || '<p class="muted">None yet.</p>';
+    const records = await fetchDirectoryRecords(name);
+    saveCache(current, name, records);
+    renderDirectory(records, target, false);
   } catch (error) {
-    box.innerHTML = `<p class="muted">${esc(error.message)}</p>`;
+    const cached = loadCache(current, name);
+    if (cached?.value) renderDirectory(cached.value, target, true);
+    else $(target).innerHTML = `<p class="muted">${esc(error.message)}</p>`;
   }
 }
 
-function openUrl(url, label) {
+function openUrl(url, label, windowName) {
   if (!url) {
     alert(`Set your ${label} conversation URL in Settings first.`);
     openSettings();
     return;
   }
-  window.open(url, '_blank', 'noopener');
+  const tab = window.open(url, windowName);
+  try { if (tab) tab.opener = null; } catch {}
 }
 
 function markVisibleRead() {
   if (!current) return;
   const seen = getSeen(current);
   let shas = [];
-  try {
-    shas = JSON.parse($('#messages').dataset.visibleShas || '[]');
-  } catch {}
+  try { shas = JSON.parse($('#messages').dataset.visibleShas || '[]'); } catch {}
   shas.forEach(sha => seen.add(sha));
   saveSeen(current, seen);
-  loadMessages();
+  const cached = loadCache(current, 'messages');
+  if (cached?.value) renderMessages(cached.value, !!$('#staleBanner').hidden === false);
+  else loadMessages();
 }
 
 function bind() {
@@ -251,9 +320,9 @@ function bind() {
   $('#refreshBtn').onclick = loadMessages;
   $('#refreshBtnSide').onclick = loadMessages;
   $('#markReadBtn').onclick = markVisibleRead;
-  $('#openGitBtn').onclick = () => window.open(`https://github.com/${REPO}/tree/main/${current.path}`, '_blank', 'noopener');
-  $('#openGptBtn').onclick = () => openUrl(settings().gptUrl, 'ChatGPT');
-  $('#openGrokBtn').onclick = () => openUrl(settings().grokUrl, 'Grok');
+  $('#openGitBtn').onclick = () => window.open(`https://github.com/${REPO}/tree/main/${current.path}`, 'squareTableGitHub');
+  $('#openGptBtn').onclick = () => openUrl(settings().gptUrl, 'ChatGPT', 'squareTableGPT');
+  $('#openGrokBtn').onclick = () => openUrl(settings().grokUrl, 'Grok', 'squareTableGrok');
   $('#settingsBtn').onclick = openSettings;
   $('#setupSettingsBtn').onclick = openSettings;
 
@@ -262,18 +331,26 @@ function bind() {
     saveSettings({
       gptUrl: $('#gptUrl').value.trim(),
       grokUrl: $('#grokUrl').value.trim(),
+      githubToken: $('#githubToken').value.trim(),
       pollSeconds: Math.max(60, Number($('#pollSeconds').value) || 120)
     });
+    rateLimitUntil = 0;
     $('#setupNudge').hidden = !!(settings().gptUrl || settings().grokUrl);
     $('#settingsDialog').close();
+    loadMessages();
     schedule();
   };
 }
 
 function schedule() {
-  if (timer) clearInterval(timer);
-  const seconds = Math.max(60, settings().pollSeconds || 120);
-  timer = setInterval(() => current && loadMessages(), seconds * 1000);
+  if (timer) clearTimeout(timer);
+  const normalDelay = Math.max(60, settings().pollSeconds || 120) * 1000;
+  const resetDelay = Math.max(0, rateLimitUntil - Date.now() + 5000);
+  const delay = Math.max(normalDelay, resetDelay);
+  timer = setTimeout(async () => {
+    if (current) await loadMessages();
+    schedule();
+  }, delay);
 }
 
 init().catch(error => {
