@@ -1,0 +1,10 @@
+[
+  {
+    "id": "square-table-ui",
+    "name": "Project 001 — Square Table Interface",
+    "status": "ACTIVE",
+    "description": "Build the shared interface that will support future GPT + Grok + Pierre projects.",
+    "path": "projects/square-table-ui",
+    "preview": "./"
+  }
+]
