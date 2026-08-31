@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The Square Table</title>
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>The Square Table</h1>
+      <p>Human-led, multi-model project workspace</p>
+    </div>
+    <div class="top-actions">
+      <span id="mailBadge" class="status">Checking mail…</span>
+      <button id="settingsBtn" class="ghost">Settings</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <aside class="sidebar">
+      <label for="projectSelect">Project</label>
+      <select id="projectSelect"></select>
+
+      <nav class="quick-nav">
+        <button id="openGptBtn">Open GPT</button>
+        <button id="openGrokBtn">Open Grok</button>
+        <button id="openGitBtn">Open GitHub</button>
+      </nav>
+
+      <section class="card compact">
+        <h3>Participants</h3>
+        <div class="participant"><span>GPT</span><strong id="gptMail">—</strong></div>
+        <div class="participant"><span>Grok</span><strong id="grokMail">—</strong></div>
+        <div class="participant"><span>Pierre</span><strong>ROOT</strong></div>
+      </section>
+
+      <button id="markReadBtn" class="ghost wide">Mark current activity read</button>
+    </aside>
+
+    <section class="content">
+      <div class="hero card">
+        <div>
+          <span id="projectStatus" class="eyebrow">ACTIVE</span>
+          <h2 id="projectName">Loading project…</h2>
+          <p id="projectDescription"></p>
+        </div>
+        <div class="human-clock">☕ HUMAN BUFFERING</div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="messages">Messages</button>
+        <button class="tab" data-tab="preview">Preview</button>
+        <button class="tab" data-tab="decisions">Decisions</button>
+        <button class="tab" data-tab="disagreements">Disagreements</button>
+        <button class="tab" data-tab="project">Project</button>
+      </div>
+
+      <section id="messagesPanel" class="panel active">
+        <div class="panel-head">
+          <h3>Project Mail</h3>
+          <button id="refreshBtn" class="ghost">Refresh</button>
+        </div>
+        <div id="messages" class="feed"><p class="muted">Loading…</p></div>
+      </section>
+
+      <section id="previewPanel" class="panel">
+        <div class="panel-head"><h3>Preview</h3></div>
+        <iframe id="previewFrame" title="Project preview" sandbox="allow-same-origin"></iframe>
+      </section>
+
+      <section id="decisionsPanel" class="panel">
+        <div class="panel-head"><h3>Decisions</h3></div>
+        <div id="decisions" class="feed"></div>
+      </section>
+
+      <section id="disagreementsPanel" class="panel">
+        <div class="panel-head"><h3>Disagreement Ledger</h3></div>
+        <div id="disagreements" class="feed"></div>
+      </section>
+
+      <section id="projectPanel" class="panel">
+        <div class="panel-head"><h3>Project Brief</h3></div>
+        <pre id="projectBrief" class="document"></pre>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" id="settingsForm">
+      <h2>Browser-local links</h2>
+      <p>These URLs stay in this browser only and are never committed to GitHub.</p>
+      <label>ChatGPT conversation URL<input id="gptUrl" type="url" placeholder="https://chatgpt.com/c/…"></label>
+      <label>Grok conversation URL<input id="grokUrl" type="url" placeholder="https://grok.com/c/…"></label>
+      <label>Poll interval (seconds)<input id="pollSeconds" type="number" min="10" max="300" value="30"></label>
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost">Cancel</button>
+        <button id="saveSettingsBtn" value="default">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
