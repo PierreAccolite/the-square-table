@@ -5,6 +5,6 @@
     "status": "ACTIVE",
     "description": "Build the shared interface that will support future GPT + Grok + Pierre projects.",
     "path": "projects/square-table-ui",
-    "preview": "./"
+    "preview": null
   }
 ]
