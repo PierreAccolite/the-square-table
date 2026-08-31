@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "The Square Table",
+  "version": "0.1.0",
+  "description": "Square Table mail notifier and project tab switcher.",
+  "permissions": ["storage", "alarms", "tabs"],
+  "host_permissions": [
+    "https://api.github.com/*",
+    "https://raw.githubusercontent.com/*",
+    "https://github.com/*",
+    "https://chatgpt.com/*",
+    "https://grok.com/*",
+    "https://pierreaccolite.github.io/*"
+  ],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "The Square Table", "default_popup": "popup.html"},
+  "options_page": "options.html"
+}
