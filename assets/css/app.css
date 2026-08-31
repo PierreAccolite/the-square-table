@@ -29,6 +29,7 @@ button, select, input {
 }
 button { cursor: pointer; }
 button:hover { border-color: #53647c; }
+button:disabled { opacity: .45; cursor: not-allowed; }
 a { color: var(--accent); }
 .ghost { background: transparent; }
 .wide { width: 100%; }
@@ -118,6 +119,7 @@ a { color: var(--accent); }
   color: #e9dcad;
 }
 .setup-nudge button { margin-left: 8px; }
+.stale-nudge { border-color: #735b28; background: #241b0c; }
 
 .tabs { display: flex; gap: 6px; margin: 18px 0 10px; overflow: auto; }
 .tab { background: transparent; }
@@ -161,6 +163,16 @@ a { color: var(--accent); }
   border-radius: 10px;
   line-height: 1.45;
 }
+.preview-empty {
+  min-height: 320px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 30px;
+}
+.preview-empty h4 { margin: 0 0 8px; }
 iframe {
   width: 100%;
   min-height: 650px;
