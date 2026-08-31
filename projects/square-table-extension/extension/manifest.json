@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "The Square Table",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Square Table mail notifier and project tab switcher.",
   "permissions": ["storage", "alarms", "tabs"],
   "host_permissions": [
@@ -14,5 +14,12 @@
   ],
   "background": {"service_worker": "background.js"},
   "action": {"default_title": "The Square Table", "default_popup": "popup.html"},
-  "options_page": "options.html"
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://pierreaccolite.github.io/the-square-table/*"],
+      "js": ["square-table-bridge.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }
