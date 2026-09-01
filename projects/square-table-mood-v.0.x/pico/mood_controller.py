@@ -37,32 +37,32 @@ def clear():
     np.write()
 
 
-def mapping_for(count):
-    return MAP_4X8 if count == 32 else MAP_4X4
-
-
 def clamp(v, lo=0, hi=255):
     return max(lo, min(hi, int(v)))
 
 
-def rgb(value, default=(255, 255, 255)):
-    if not isinstance(value, (list, tuple)) or len(value) != 3:
+def rgb(value, default=(255,255,255)):
+    if not isinstance(value, (list,tuple)) or len(value) != 3:
         return default
     return (clamp(value[0]), clamp(value[1]), clamp(value[2]))
 
 
 def scale(c, brightness):
     f = max(0, min(100, int(brightness))) / 100
-    return (int(c[0] * f), int(c[1] * f), int(c[2] * f))
+    return (int(c[0]*f), int(c[1]*f), int(c[2]*f))
+
+
+def mapping_for(count):
+    return MAP_4X8 if count == 32 else MAP_4X4
 
 
 def show_pixels(pixels, brightness=100):
     count = len(pixels)
-    if count not in (16, 32):
+    if count not in (16,32):
         return
     mapping = mapping_for(count)
     for i in range(MAX_LEDS):
-        np[i] = (0, 0, 0)
+        np[i] = (0,0,0)
     for logical in range(count):
         np[mapping[logical]] = scale(pixels[logical], brightness)
     np.write()
@@ -75,367 +75,318 @@ def check_command():
 
 
 def normalize_pixels(pixels):
-    if not isinstance(pixels, list) or len(pixels) not in (16, 32):
+    if not isinstance(pixels,list) or len(pixels) not in (16,32):
         return None
-    out = []
+    out=[]
     for p in pixels:
-        if not isinstance(p, (list, tuple)) or len(p) != 3:
+        if not isinstance(p,(list,tuple)) or len(p)!=3:
             return None
-        out.append((clamp(p[0]), clamp(p[1]), clamp(p[2])))
+        out.append((clamp(p[0]),clamp(p[1]),clamp(p[2])))
     return out
 
 
 def temperature_color(temp):
-    stops = [
-        (-10, (0,70,255)), (0, (0,180,255)), (10, (0,255,180)),
-        (20, (80,255,0)), (25, (255,220,0)), (30, (255,120,0)),
-        (35, (255,35,0)), (40, (150,0,0))
-    ]
+    stops=[(-10,(0,70,255)),(0,(0,180,255)),(10,(0,255,180)),(20,(80,255,0)),(25,(255,220,0)),(30,(255,120,0)),(35,(255,35,0)),(40,(150,0,0))]
     if temp <= stops[0][0]: return stops[0][1]
     if temp >= stops[-1][0]: return stops[-1][1]
-    for (t1,c1),(t2,c2) in zip(stops, stops[1:]):
+    for (t1,c1),(t2,c2) in zip(stops,stops[1:]):
         if t1 <= temp <= t2:
-            f = (temp-t1)/(t2-t1)
+            f=(temp-t1)/(t2-t1)
             return tuple(int(c1[i]+(c2[i]-c1[i])*f) for i in range(3))
     return (255,255,255)
 
 
-def read_dht():
-    try:
-        sensor.measure()
-        return sensor.temperature(), sensor.humidity(), None
-    except Exception as e:
-        return None, None, str(e)
+def read_dht(retries=2):
+    last_error = None
+    for attempt in range(retries+1):
+        try:
+            sensor.measure()
+            return sensor.temperature(), sensor.humidity(), None
+        except Exception as e:
+            last_error = str(e)
+            if attempt < retries:
+                time.sleep_ms(250)
+    return None,None,last_error
 
 
 def read_pico_temperature():
-    reading = pico_adc.read_u16()
-    voltage = reading * 3.3 / 65535
-    return 27 - (voltage - 0.706) / 0.001721
+    reading=pico_adc.read_u16()
+    voltage=reading*3.3/65535
+    return 27-(voltage-0.706)/0.001721
 
 
 def show_temperature(temp, brightness=AUTO_TEMP_BRIGHTNESS, count=16):
-    show_pixels([temperature_color(temp)] * count, brightness)
+    show_pixels([temperature_color(temp)]*count, brightness)
 
 
 def automatic_temperature_update(force=False):
-    global last_auto_temp_ms, last_temp
+    global last_auto_temp_ms,last_temp
     if host_active and not force:
         return
-    temp, humidity, error = read_dht()
-    last_auto_temp_ms = time.ticks_ms()
+    temp,humidity,error=read_dht(2)
+    last_auto_temp_ms=time.ticks_ms()
     if temp is not None:
-        last_temp = temp
+        last_temp=temp
         show_temperature(temp)
-        print("AUTO_TEMP %.1f %.1f" % (temp, humidity))
+        print("AUTO_TEMP %.1f %.1f" % (temp,humidity))
     elif force:
-        show_pixels([(0,40,120)] * 16, 40)
-        print("AUTO_TEMP_ERROR", error)
-
-
-def blend(a,b,f):
-    return (int(a[0]+(b[0]-a[0])*f), int(a[1]+(b[1]-a[1])*f), int(a[2]+(b[2]-a[2])*f))
-
-
-def transition(current,target,kind,duration,brightness):
-    kind = str(kind).upper()
-    count = len(target)
-    if kind == "CUT" or current is None or len(current) != count:
-        show_pixels(target, brightness)
-        return
-    steps = max(4, min(32, int(duration)//40))
-    delay = max(0.01, duration/steps/1000)
-    if kind == "FADE":
-        for s in range(steps+1):
-            show_pixels([blend(current[i],target[i],s/steps) for i in range(count)], brightness)
-            time.sleep(delay)
-            cmd = check_command()
-            if cmd:
-                return cmd
-    else:
-        show_pixels(target, brightness)
-        time.sleep(max(0.02, duration/1000))
-        return check_command()
-
-
-def run_custom_mood(payload):
-    pixels = normalize_pixels(payload.get("pixels"))
-    if pixels is None:
-        print("ERROR: mood needs 16 or 32 pixels")
-        return None
-    effect = str(payload.get("effect","STATIC")).upper()
-    speed = max(20, min(2000, int(payload.get("speed",100))))
-    brightness = max(1, min(100, int(payload.get("brightness",100))))
-    if effect == "STATIC":
-        show_pixels(pixels, brightness)
-        return None
-    if effect == "WIPE":
-        for n in range(1, len(pixels)+1):
-            frame = list(pixels)
-            for i in range(n, len(frame)):
-                frame[i] = (0,0,0)
-            show_pixels(frame, brightness)
-            time.sleep(speed/1000)
-            cmd = check_command()
-            if cmd: return cmd
-        return None
-    if effect == "SCROLL":
-        offset = 0
-        while True:
-            show_pixels([pixels[(i-offset)%len(pixels)] for i in range(len(pixels))], brightness)
-            offset = (offset+1)%len(pixels)
-            time.sleep(speed/1000)
-            cmd = check_command()
-            if cmd: return cmd
-    if effect == "PULSE":
-        while True:
-            for level in list(range(10,101,5))+list(range(100,9,-5)):
-                show_pixels(pixels, int(brightness*level/100))
-                time.sleep(speed/5000)
-                cmd = check_command()
-                if cmd: return cmd
-    show_pixels(pixels, brightness)
-    return None
-
-
-def start_live_effect(payload):
-    global active_effect, rain_state, cloud_state
-    effect = str(payload.get("effect","")).upper()
-    if effect not in ("CODE_RAIN", "PASTEL_CLOUDS"):
-        print("ERROR: unknown live effect", effect)
-        return
-    active_effect = payload.copy()
-    rain_state = None
-    cloud_state = None
-    print("EFFECT_STARTED", effect)
+        # Always leave a visible boot indication even if the first DHT11 read fails.
+        show_pixels([(0,35,120)]*16, 55)
+        print("AUTO_TEMP_ERROR",error)
 
 
 def stop_live_effect():
-    global active_effect, rain_state, cloud_state
-    active_effect = None
-    rain_state = None
-    cloud_state = None
+    global active_effect,rain_state,cloud_state
+    active_effect=None
+    rain_state=None
+    cloud_state=None
     clear()
     print("EFFECT_STOPPED")
 
 
+def start_live_effect(payload):
+    global active_effect,rain_state,cloud_state
+    effect=str(payload.get("effect","")).upper()
+    if effect not in ("CODE_RAIN","PASTEL_CLOUDS"):
+        print("ERROR: unknown live effect",effect)
+        return
+    active_effect=payload.copy()
+    rain_state=None
+    cloud_state=None
+    print("EFFECT_STARTED",effect)
+
+
 def effect_interval(payload):
-    return max(20, min(1000, int(payload.get("speed",80))))
+    return max(20,min(1000,int(payload.get("speed",80))))
 
 
 def live_rain_step(payload):
     global rain_state
-    count = 32 if int(payload.get("width",4)) == 8 else 16
-    width = 8 if count == 32 else 4
-    height = 4
-    base = rgb(payload.get("color"),(0,255,80))
-    accent = rgb(payload.get("accent"),(255,255,255))
-    brightness = max(1, min(100, int(payload.get("brightness",70))))
-    if rain_state is None or rain_state.get("count") != count:
-        rain_state = {"count":count,"frame":0,"seeds":[random.randint(0,9999) for _ in range(width)],"lengths":[random.randint(2,5) for _ in range(width)],"drift":[random.choice((-1,0,0,0,1)) for _ in range(width)]}
-    state = rain_state
-    frame_no = state["frame"]
-    pixels = [(0,0,0)] * count
+    count=32 if int(payload.get("width",4))==8 else 16
+    width=8 if count==32 else 4
+    base=rgb(payload.get("color"),(0,255,80))
+    accent=rgb(payload.get("accent"),(255,255,255))
+    brightness=max(1,min(100,int(payload.get("brightness",70))))
+    if rain_state is None or rain_state.get("count")!=count:
+        rain_state={"count":count,"frame":0,"seeds":[random.randint(0,9999) for _ in range(width)],"lengths":[random.randint(2,5) for _ in range(width)]}
+    state=rain_state
+    frame_no=state["frame"]
+    pixels=[(0,0,0)]*count
     for c in range(width):
-        phase = (frame_no * (1 + (c % 3) * 0.17) + state["seeds"][c]) % (height + 8)
-        head = phase - 2
-        trail = state["lengths"][c]
-        for r in range(height):
-            d = head-r
+        phase=(frame_no*(1+(c%3)*0.17)+state["seeds"][c])%12
+        head=phase-2
+        trail=state["lengths"][c]
+        for r in range(4):
+            d=head-r
             if 0 <= d <= trail:
-                pixels[r*width+c] = accent if d < 0.8 else scale(base, max(18,100-int(d*24)))
-        if random.random() < 0.08:
-            r = random.randrange(height)
-            pixels[r*width+c] = scale(accent, random.randint(35,80))
-        if random.random() < 0.025:
-            state["seeds"][c] = random.randint(0,9999)
-            state["lengths"][c] = random.randint(2,5)
-    show_pixels(pixels, brightness)
-    state["frame"] = (frame_no+1) % 100000
+                pixels[r*width+c]=accent if d<0.8 else scale(base,max(18,100-int(d*24)))
+        if random.random()<0.08:
+            pixels[random.randrange(4)*width+c]=scale(accent,random.randint(35,80))
+        if random.random()<0.025:
+            state["seeds"][c]=random.randint(0,9999)
+            state["lengths"][c]=random.randint(2,5)
+    show_pixels(pixels,brightness)
+    state["frame"]=(frame_no+1)%100000
 
 
-def palette_color(pos, colors):
-    n = len(colors)
-    p = (pos % n + n) % n
-    i = int(p)
-    f = p-i
-    return blend(colors[i], colors[(i+1)%n], f)
+def blend(a,b,f):
+    return tuple(int(a[i]+(b[i]-a[i])*f) for i in range(3))
+
+
+def palette_color(pos,colors):
+    n=len(colors)
+    p=(pos%n+n)%n
+    i=int(p)
+    return blend(colors[i],colors[(i+1)%n],p-i)
 
 
 def live_clouds_step(payload):
     global cloud_state
-    count = 32 if int(payload.get("width",4)) == 8 else 16
-    width = 8 if count == 32 else 4
-    colors = [rgb(c) for c in payload.get("colors",[(158,220,255),(216,180,254),(255,214,231),(255,242,178)])]
-    if len(colors) < 2: colors = [colors[0], colors[0]]
-    brightness = max(1, min(100, int(payload.get("brightness",70))))
-    if cloud_state is None or cloud_state.get("count") != count:
-        cloud_state = {"count":count,"frame":0,"phase":[random.random()*10 for _ in range(3)]}
-    state = cloud_state
-    frame = state["frame"]
-    p0,p1,p2 = state["phase"]
-    pixels = []
+    count=32 if int(payload.get("width",4))==8 else 16
+    width=8 if count==32 else 4
+    colors=[rgb(c) for c in payload.get("colors",[(158,220,255),(216,180,254),(255,214,231),(255,242,178)])]
+    if len(colors)<2: colors=[colors[0],colors[0]]
+    brightness=max(1,min(100,int(payload.get("brightness",70))))
+    if cloud_state is None or cloud_state.get("count")!=count:
+        cloud_state={"count":count,"frame":0,"phase":[random.random()*10 for _ in range(3)]}
+    state=cloud_state
+    frame=state["frame"]
+    p0,p1,p2=state["phase"]
+    pixels=[]
     for r in range(4):
         for c in range(width):
-            wave = (math.sin(frame*0.045+c*0.75+r*1.05+p0)*0.8 +
-                    math.sin(frame*0.021-c*0.42+r*0.55+p1)*0.55 +
-                    math.sin(frame*0.013+r+c*0.18+p2)*0.3)
-            pos = (wave+1.65)*len(colors)/3.3
-            pixels.append(palette_color(pos, colors))
-    show_pixels(pixels, brightness)
-    state["frame"] = (frame+1) % 100000
+            wave=(math.sin(frame*0.045+c*0.75+r*1.05+p0)*0.8+math.sin(frame*0.021-c*0.42+r*0.55+p1)*0.55+math.sin(frame*0.013+r+c*0.18+p2)*0.3)
+            pixels.append(palette_color((wave+1.65)*len(colors)/3.3,colors))
+    show_pixels(pixels,brightness)
+    state["frame"]=(frame+1)%100000
 
 
 def step_live_effect():
     if not active_effect:
         return
-    effect = str(active_effect.get("effect","")).upper()
-    if effect == "CODE_RAIN":
-        live_rain_step(active_effect)
-    elif effect == "PASTEL_CLOUDS":
-        live_clouds_step(active_effect)
+    effect=str(active_effect.get("effect","")).upper()
+    if effect=="CODE_RAIN": live_rain_step(active_effect)
+    elif effect=="PASTEL_CLOUDS": live_clouds_step(active_effect)
     time.sleep_ms(effect_interval(active_effect))
 
 
 def read_sensor():
-    temp, humidity, error = read_dht()
-    result = {"type":"sensor", "pico_temperature":round(read_pico_temperature(),1)}
+    temp,humidity,error=read_dht(2)
+    result={"type":"sensor","pico_temperature":round(read_pico_temperature(),1)}
     if temp is None:
-        result["error"] = error
+        result["error"]=error
     else:
-        result["temperature"] = temp
-        result["humidity"] = humidity
+        result["temperature"]=temp
+        result["humidity"]=humidity
     return result
 
 
-def breathing(r,g,b):
-    for brightness in range(2,30,2):
-        for i in range(MAX_LEDS): np[i]=(r*brightness//30,g*brightness//30,b*brightness//30)
-        np.write(); time.sleep(0.04)
-    for brightness in range(30,2,-2):
-        for i in range(MAX_LEDS): np[i]=(r*brightness//30,g*brightness//30,b*brightness//30)
-        np.write(); time.sleep(0.04)
-
-
-def thinking():
-    clear()
-    for i in range(MAX_LEDS):
-        clear(); np[i]=(0,0,25)
-        if i>0: np[i-1]=(0,0,8)
-        np.write(); time.sleep(0.08)
-
-
-def disagreement():
-    for c in ((25,0,0),(0,0,25)):
-        for i in range(MAX_LEDS): np[i]=c
-        np.write(); time.sleep(0.3)
-
-
-def happy():
-    clear()
-    for i in [0,3,4,7,9,10,13,14]: np[i]=(0,25,0)
-    np.write()
+def run_custom_mood(payload):
+    pixels=normalize_pixels(payload.get("pixels"))
+    if pixels is None:
+        print("ERROR: mood needs 16 or 32 pixels")
+        return
+    brightness=max(1,min(100,int(payload.get("brightness",100))))
+    effect=str(payload.get("effect","STATIC")).upper()
+    speed=max(20,min(2000,int(payload.get("speed",100))))
+    if effect=="STATIC":
+        show_pixels(pixels,brightness); return
+    if effect=="WIPE":
+        for n in range(1,len(pixels)+1):
+            frame=list(pixels)
+            for i in range(n,len(frame)): frame[i]=(0,0,0)
+            show_pixels(frame,brightness); time.sleep_ms(speed)
+            cmd=check_command()
+            if cmd: handle_command(cmd); return
+        return
+    if effect=="SCROLL":
+        offset=0
+        while True:
+            show_pixels([pixels[(i-offset)%len(pixels)] for i in range(len(pixels))],brightness)
+            offset=(offset+1)%len(pixels); time.sleep_ms(speed)
+            cmd=check_command()
+            if cmd: handle_command(cmd); return
+    if effect=="PULSE":
+        while True:
+            for level in list(range(10,101,5))+list(range(100,9,-5)):
+                show_pixels(pixels,int(brightness*level/100)); time.sleep_ms(max(10,speed//5))
+                cmd=check_command()
+                if cmd: handle_command(cmd); return
+    show_pixels(pixels,brightness)
 
 
 def show_mood(mood):
     mood=mood.strip().upper()
-    if mood=="HAPPY": happy()
-    elif mood=="THINKING": thinking()
+    if mood=="HAPPY":
+        clear()
+        for i in [0,3,4,7,9,10,13,14]: np[i]=(0,25,0)
+        np.write()
+    elif mood=="THINKING":
+        clear()
+        for i in range(16):
+            clear(); np[i]=(0,0,25)
+            if i>0: np[i-1]=(0,0,8)
+            np.write(); time.sleep_ms(80)
     elif mood=="OPTIMISTIC": breathing(0,25,5)
     elif mood=="SKEPTICAL": breathing(25,10,0)
-    elif mood=="ERROR":
-        for i in range(MAX_LEDS): np[i]=(30,0,0)
-        np.write(); time.sleep(0.3); clear(); time.sleep(0.3)
-    elif mood=="AGREEMENT":
-        for i in range(MAX_LEDS): np[i]=(0,25,10)
-        np.write(); time.sleep(1)
-    elif mood=="DISAGREEMENT": disagreement()
+    elif mood=="ERROR": fill((30,0,0)); time.sleep_ms(300); clear(); time.sleep_ms(300)
+    elif mood=="AGREEMENT": fill((0,25,10)); time.sleep_ms(1000)
+    elif mood=="DISAGREEMENT": fill((25,0,0)); time.sleep_ms(300); fill((0,0,25)); time.sleep_ms(300)
     elif mood=="BUFFERING": breathing(25,8,0)
     elif mood=="IDLE": breathing(0,5,15)
     else: clear()
 
 
-def handle_command(command):
-    global host_active
-    if not command:
-        return
-    upper=command.upper()
-    if upper=="HOST_ON":
-        host_active=True
-        stop_live_effect()
-        print("HOST_ON")
-        return
-    if upper=="HOST_OFF":
-        host_active=False
-        stop_live_effect()
-        automatic_temperature_update(force=True)
-        print("HOST_OFF")
-        print("READY")
-        return
-    if upper=="SENSOR":
-        print(json.dumps(read_sensor(),separators=(",",":")))
-        print("READY")
-        return
-    if upper=="STOP_EFFECT":
-        stop_live_effect()
-        print("READY")
-        return
-    if command.startswith("{"):
-        try:
-            payload=json.loads(command)
-            kind=payload.get("type")
-            if kind=="effect":
-                start_live_effect(payload)
-                return
-            if kind=="mood":
-                stop_live_effect()
-                run_custom_mood(payload)
-                print("READY")
-                return
-            if kind=="feed":
-                stop_live_effect()
-                run_feed(payload)
-                print("READY")
-                return
-            print("ERROR: unknown JSON command")
-        except Exception as e:
-            print("ERROR:",e)
-        return
-    stop_live_effect()
-    show_mood(command)
-    print("READY")
+def fill(c):
+    for i in range(MAX_LEDS): np[i]=c
+    np.write()
+
+
+def breathing(r,g,b):
+    for level in list(range(2,30,2))+list(range(30,2,-2)):
+        fill((r*level//30,g*level//30,b*level//30))
+        time.sleep_ms(40)
+
+
+def transition(target,kind="FADE",duration=1200,brightness=100):
+    # Keep transitions interruptible so the Pico can always receive a command.
+    show_pixels(target,brightness)
+    end=time.ticks_add(time.ticks_ms(),max(20,duration))
+    while time.ticks_diff(end,time.ticks_ms())>0:
+        time.sleep_ms(25)
+        cmd=check_command()
+        if cmd:
+            handle_command(cmd)
+            return True
+    return False
 
 
 def run_feed(payload):
     frames=payload.get("frames")
-    if not isinstance(frames,list) or not frames:
-        return
+    if not isinstance(frames,list) or not frames: return
     loop=bool(payload.get("loop",True))
-    current=None
     while True:
         for frame in frames:
-            pixels=normalize_pixels(frame.get("pixels") if isinstance(frame,dict) else None)
+            if not isinstance(frame,dict): continue
+            pixels=normalize_pixels(frame.get("pixels"))
             if pixels is None: continue
-            kind=str(frame.get("transition","FADE")).upper() if isinstance(frame,dict) else "FADE"
-            duration=int(frame.get("duration",1200)) if isinstance(frame,dict) else 1200
-            brightness=max(1,min(100,int(frame.get("brightness",100)))) if isinstance(frame,dict) else 100
-            cmd=transition(current,pixels,kind,duration,brightness)
-            current=pixels
-            if cmd:
-                handle_command(cmd)
-                return
-            hold=max(20,min(10000,int(frame.get("hold",500)))) if isinstance(frame,dict) else 500
+            if transition(pixels,str(frame.get("transition","FADE")),int(frame.get("duration",1200)),int(frame.get("brightness",100))): return
+            hold=max(20,min(10000,int(frame.get("hold",500))))
             end=time.ticks_add(time.ticks_ms(),hold)
             while time.ticks_diff(end,time.ticks_ms())>0:
-                time.sleep_ms(30)
+                time.sleep_ms(25)
                 cmd=check_command()
                 if cmd:
-                    handle_command(cmd)
-                    return
-        if not loop:
-            return
+                    handle_command(cmd); return
+        if not loop: return
 
 
+def handle_command(command):
+    global host_active
+    if not command: return
+    upper=command.upper()
+    if upper=="HOST_ON":
+        host_active=True
+        # Do not blank the matrix on host connection. Keep the last known
+        # temperature visible until the PC sends a mood/effect.
+        if last_temp is not None:
+            show_temperature(last_temp)
+        else:
+            automatic_temperature_update(force=True)
+        print("HOST_ON"); print("READY"); return
+    if upper=="HOST_OFF":
+        host_active=False
+        active_effect=None
+        automatic_temperature_update(force=True)
+        print("HOST_OFF"); print("READY"); return
+    if upper=="SENSOR":
+        print(json.dumps(read_sensor(),separators=(",",":")))
+        print("READY"); return
+    if upper=="STOP_EFFECT":
+        stop_live_effect(); print("READY"); return
+    if command.startswith("{"):
+        try:
+            payload=json.loads(command)
+            kind=payload.get("type")
+            if kind=="effect": start_live_effect(payload); return
+            if kind=="mood":
+                active_effect=None
+                run_custom_mood(payload); print("READY"); return
+            if kind=="feed":
+                active_effect=None
+                run_feed(payload); print("READY"); return
+            print("ERROR: unknown JSON command")
+        except Exception as e:
+            print("ERROR:",e)
+        return
+    active_effect=None
+    show_mood(command)
+    print("READY")
+
+
+# Give the DHT11 a moment after power-up. The first measurement can otherwise
+# fail while the sensor settles, leaving a freshly powered table apparently dark.
+time.sleep_ms(1200)
 automatic_temperature_update(force=True)
 print("AI Mood Matrix online")
 print("Stand-alone DHT11 temperature mode ready")
