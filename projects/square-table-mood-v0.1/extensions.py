@@ -63,10 +63,17 @@ def read_local_sensor():
         except ValueError:
             continue
         if sensor.get("type") == "sensor":
-            if "error" in sensor:
+            if "error" in sensor and "temperature" not in sensor:
                 raise RuntimeError(sensor["error"])
-            return float(sensor["temperature"]), float(sensor.get("humidity", 0))
-    raise TimeoutError("No DHT11 reading received from Pico.")
+            return float(sensor.get("temperature", 0)), float(sensor.get("humidity", 0)), float(sensor.get("pico_temperature", 0))
+    raise TimeoutError("No sensor reading received from Pico.")
+
+
+def send_host_command(command):
+    if not core.serial_conn or not core.serial_conn.is_open:
+        return
+    core.serial_conn.write((command + "\n").encode("utf-8"))
+    core.serial_conn.flush()
 
 
 def send_matrix_packet(payload):
@@ -89,6 +96,35 @@ def send_matrix_packet(payload):
     return packet
 
 
+def clean_frames(frames, max_frames=32):
+    if not isinstance(frames, list) or not frames:
+        raise ValueError("A feed needs at least one pattern.")
+    if len(frames) > max_frames:
+        raise ValueError(f"A feed can contain at most {max_frames} patterns.")
+    valid_transitions = {"CUT", "FADE", "SLIDE_LEFT", "SLIDE_RIGHT", "SPIN", "STAR"}
+    clean = []
+    for frame in frames:
+        pixels = frame.get("pixels") if isinstance(frame, dict) else None
+        if not isinstance(pixels, list) or len(pixels) not in (16, 32):
+            raise ValueError("Each pattern must contain 16 or 32 pixels.")
+        clean_pixels = []
+        for pixel in pixels:
+            if not isinstance(pixel, list) or len(pixel) != 3:
+                raise ValueError("Each pixel must contain RGB values.")
+            clean_pixels.append([max(0, min(255, int(v))) for v in pixel])
+        transition = str(frame.get("transition", "FADE")).upper()
+        if transition not in valid_transitions:
+            transition = "FADE"
+        clean.append({
+            "pixels": clean_pixels,
+            "transition": transition,
+            "duration": max(50, min(10000, int(frame.get("duration", 1200)))),
+            "hold": max(20, min(10000, int(frame.get("hold", 500)))),
+            "brightness": max(1, min(100, int(frame.get("brightness", 100))))
+        })
+    return clean
+
+
 def register(app):
     @app.get("/api/feeds")
     def feeds():
@@ -98,35 +134,13 @@ def register(app):
     def save_feed():
         data = request.get_json(silent=True) or {}
         name = str(data.get("name", "")).strip().upper()
-        frames = data.get("frames")
         loop = bool(data.get("loop", True))
         if not name:
             return jsonify({"ok": False, "error": "Feed name is required."}), 400
-        if not isinstance(frames, list) or not frames:
-            return jsonify({"ok": False, "error": "A feed needs at least one pattern."}), 400
-        if len(frames) > 32:
-            return jsonify({"ok": False, "error": "A feed can contain at most 32 patterns."}), 400
-        clean = []
-        valid_transitions = {"CUT", "FADE", "SLIDE_LEFT", "SLIDE_RIGHT", "SPIN", "STAR"}
-        for frame in frames:
-            pixels = frame.get("pixels") if isinstance(frame, dict) else None
-            if not isinstance(pixels, list) or len(pixels) not in (16, 32):
-                return jsonify({"ok": False, "error": "Each pattern must contain 16 or 32 pixels."}), 400
-            clean_pixels = []
-            for pixel in pixels:
-                if not isinstance(pixel, list) or len(pixel) != 3:
-                    return jsonify({"ok": False, "error": "Each pixel must contain RGB values."}), 400
-                clean_pixels.append([max(0, min(255, int(v))) for v in pixel])
-            transition = str(frame.get("transition", "FADE")).upper()
-            if transition not in valid_transitions:
-                transition = "FADE"
-            clean.append({
-                "pixels": clean_pixels,
-                "transition": transition,
-                "duration": max(100, min(10000, int(frame.get("duration", 1200)))),
-                "hold": max(100, min(10000, int(frame.get("hold", 500)))),
-                "brightness": max(1, min(100, int(frame.get("brightness", 100))))
-            })
+        try:
+            clean = clean_frames(data.get("frames"), 32)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
         feeds_data = load_feeds()
         feeds_data[name] = {"name": name, "frames": clean, "loop": loop}
         save_feeds(feeds_data)
@@ -145,9 +159,11 @@ def register(app):
     @app.post("/api/feed/test")
     def test_feed():
         data = request.get_json(silent=True) or {}
-        frames = data.get("frames")
-        if not isinstance(frames, list) or not frames or len(frames) > 32:
-            return jsonify({"ok": False, "error": "Invalid feed."}), 400
+        try:
+            # Live presets are allowed more frames than saved feeds.
+            frames = clean_frames(data.get("frames"), 240)
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
         if not core.serial_conn or not core.serial_conn.is_open:
             return jsonify({"ok": False, "error": "Pico is not connected."}), 409
         try:
@@ -155,7 +171,7 @@ def register(app):
             command = json.dumps(packet, separators=(",", ":"))
             core.serial_conn.write((command + "\n").encode("utf-8"))
             core.serial_conn.flush()
-            return jsonify({"ok": True, "name": packet["name"]})
+            return jsonify({"ok": True, "name": packet["name"], "frames": len(frames)})
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -240,8 +256,8 @@ def register(app):
     @app.get("/api/local-temperature")
     def local_temperature():
         try:
-            temp, humidity = read_local_sensor()
-            return jsonify({"ok": True, "temperature": temp, "humidity": humidity, "temperature_color": core.temperature_color(temp), "timestamp": time.time()})
+            temp, humidity, pico_temp = read_local_sensor()
+            return jsonify({"ok": True, "temperature": temp, "humidity": humidity, "pico_temperature": pico_temp, "temperature_color": core.temperature_color(temp), "timestamp": time.time()})
         except TimeoutError as e:
             return jsonify({"ok": False, "error": str(e)}), 504
         except Exception as e:
@@ -250,10 +266,10 @@ def register(app):
     @app.post("/api/local-temperature/apply")
     def apply_local_temperature():
         try:
-            temp, humidity = read_local_sensor()
+            temp, humidity, pico_temp = read_local_sensor()
             rgb = core.temperature_color(temp)
             send_matrix_packet({"name": "LOCAL_TEMPERATURE", "pixels": [rgb[:] for _ in range(16)], "effect": "STATIC", "speed": 100, "brightness": 100})
-            return jsonify({"ok": True, "temperature": temp, "humidity": humidity, "temperature_color": rgb, "hex": "#%02X%02X%02X" % tuple(rgb)})
+            return jsonify({"ok": True, "temperature": temp, "humidity": humidity, "pico_temperature": pico_temp, "temperature_color": rgb, "hex": "#%02X%02X%02X" % tuple(rgb)})
         except TimeoutError as e:
             return jsonify({"ok": False, "error": str(e)}), 504
         except Exception as e:
