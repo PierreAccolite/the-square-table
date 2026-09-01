@@ -1,22 +1,23 @@
 @echo off
-title Square Table AI Mood Controller v0.1.1
+title Square Table AI Mood Controller v0.4.0
+
+cd /d "%~dp0"
 
 echo ==========================================
-echo   Square Table AI Mood Controller v0.1.1
+echo   Square Table AI Mood Controller v0.4.0
 echo ==========================================
 echo.
 
-where python >nul 2>&1
+where py >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ERROR: Python was not found in PATH.
-    echo Please run this on the PC where Python is installed.
+    echo ERROR: Python Launcher was not found.
     pause
     exit /b 1
 )
 
 if not exist ".venv\Scripts\python.exe" (
     echo Creating virtual environment...
-    python -m venv .venv
+    py -3 -m venv .venv
     if %errorlevel% neq 0 (
         echo ERROR: Could not create virtual environment.
         pause
@@ -26,13 +27,18 @@ if not exist ".venv\Scripts\python.exe" (
 
 echo Installing requirements...
 ".venv\Scripts\python.exe" -m pip install -q -r requirements.txt
+if %errorlevel% neq 0 (
+    echo ERROR: Could not install requirements.
+    pause
+    exit /b 1
+)
 
 echo.
-echo RoundTable Mood Controller: http://127.0.0.1:8790
+echo Square Table Mood Controller: http://127.0.0.1:8790
 echo.
 echo Press Ctrl+C to stop.
 echo.
 
-".venv\Scripts\python.exe" app.py
+".venv\Scripts\python.exe" run.py
 
 pause
