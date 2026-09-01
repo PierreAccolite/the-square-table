@@ -1,16 +1,18 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Square Table — AI Mood Controller</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="wrap">
-  <h1>The Square Table</h1>
-  <h2>Physical AI Mood Controller</h2>
-
-  <div id="status" class="status disconnected">Pico disconnected</div>
+  <header>
+    <h1>The Square Table</h1>
+    <h2>Physical AI Mood Controller</h2>
+    <div id="status" class="status disconnected">Pico disconnected</div>
+  </header>
 
   <section>
     <h3>Connection</h3>
@@ -21,6 +23,55 @@
       <button onclick="disconnectPico()">Disconnect</button>
     </div>
     <div id="connectionLog" class="log">Ready.</div>
+  </section>
+
+  <section class="editor-card">
+    <div class="section-title">
+      <div><h3>Mood Designer</h3><p class="muted">Paint the 16 LEDs, choose an effect, then save it as a mood.</p></div>
+      <div class="row compact">
+        <select id="moodSelect" onchange="loadSelectedMood()"></select>
+        <input id="moodName" placeholder="Mood name" maxlength="32">
+      </div>
+    </div>
+
+    <div class="editor-layout">
+      <div>
+        <div id="matrix" class="matrix" aria-label="4 by 4 LED matrix"></div>
+        <div class="matrix-tools row">
+          <button onclick="clearMatrix()">Clear</button>
+          <button onclick="fillMatrix()">Fill</button>
+          <button onclick="invertMatrix()">Invert</button>
+        </div>
+      </div>
+
+      <div class="controls">
+        <label>Colour</label>
+        <div class="palette" id="palette"></div>
+        <input id="colorPicker" type="color" value="#00ff66" onchange="setCurrentColor(this.value)">
+        <div class="color-readout"><span id="colorSwatch"></span><code id="colorHex">#00FF66</code></div>
+
+        <label for="effect">Effect</label>
+        <select id="effect">
+          <option value="STATIC">Static</option>
+          <option value="WIPE">Wipe</option>
+          <option value="SCROLL">Scroll</option>
+          <option value="PULSE">Pulse / Breathe</option>
+        </select>
+
+        <label for="speed">Speed <span id="speedValue">100</span> ms</label>
+        <input id="speed" type="range" min="20" max="1000" value="100" oninput="speedValue.textContent=this.value">
+
+        <label for="brightness">Brightness <span id="brightnessValue">100</span>%</label>
+        <input id="brightness" type="range" min="1" max="100" value="100" oninput="brightnessValue.textContent=this.value">
+
+        <div class="action-buttons">
+          <button class="primary" onclick="testMood()">▶ Test</button>
+          <button class="success" onclick="saveMood()">💾 Save Mood</button>
+          <button class="danger" onclick="deleteMood()">Delete</button>
+        </div>
+      </div>
+    </div>
+    <div id="editorMessage" class="editor-message"></div>
   </section>
 
   <section>
@@ -46,15 +97,11 @@
       <button onclick="mood('BOTH_AGREE')">Both agree</button>
       <button onclick="mood('BOTH_DISAGREE')">Both disagree</button>
     </div>
-    <p class="muted">These are ready for the richer Square Table protocol later.</p>
   </section>
 
   <section>
     <h3>Raw command</h3>
-    <div class="row">
-      <input id="raw" placeholder="e.g. HAPPY">
-      <button onclick="sendRaw()">Send</button>
-    </div>
+    <div class="row"><input id="raw" placeholder="e.g. HAPPY"><button onclick="sendRaw()">Send</button></div>
   </section>
 
   <section>
@@ -62,9 +109,8 @@
     <pre id="log">Ready.</pre>
   </section>
 
-  <footer>Local only · v0.1.1</footer>
+  <footer>Local only · v0.2.0 Mood Designer</footer>
 </div>
-
 <script src="/static/app.js"></script>
 </body>
 </html>
