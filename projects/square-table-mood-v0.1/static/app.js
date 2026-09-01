@@ -13,10 +13,16 @@ const colorPicker = document.getElementById("colorPicker");
 const colorHex = document.getElementById("colorHex");
 const colorSwatch = document.getElementById("colorSwatch");
 const editorMessage = document.getElementById("editorMessage");
+const weatherLocationEl = document.getElementById("weatherLocation");
+const weatherResultEl = document.getElementById("weatherResult");
+const weatherAutoEl = document.getElementById("weatherAuto");
+const weatherUpdatedEl = document.getElementById("weatherUpdated");
 
 let moods = {};
 let pixels = Array.from({length: 16}, () => [0, 0, 0]);
 let currentColor = [0, 255, 102];
+let lastWeather = null;
+let weatherTimer = null;
 
 const palette = [
   "#000000", "#FFFFFF", "#FF0000", "#FF6600", "#FFFF00", "#00FF00",
@@ -236,6 +242,84 @@ async function testMood() {
   } catch (e) { editorMessage.textContent = "Test failed: " + e.message; log("Mood test failed: " + e.message); }
 }
 
+async function getWeather() {
+  const location = weatherLocationEl.value.trim();
+  if (!location) return weatherResultEl.textContent = "Enter a town or city first.";
+  weatherResultEl.textContent = "Looking up weather…";
+  try {
+    const r = await fetch(`/api/weather?location=${encodeURIComponent(location)}`);
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error);
+    lastWeather = data;
+    const c = data.current;
+    const rgb = data.temperature_color;
+    const mood = data.mood;
+    weatherResultEl.innerHTML = `<div class="weather-main"><span class="weather-temp">${c.temperature.toFixed(1)}°C</span><span><strong>${escapeHtml(data.location.name)}, ${escapeHtml(data.location.country || "")}</strong><br>${escapeHtml(c.description)} · wind ${Number(c.wind_speed || 0).toFixed(0)} km/h</span><span class="weather-colour" style="background:rgb(${rgb.join(",")})"></span></div><div class="muted">Generated mood: <strong>${mood.effect}</strong> · ${mood.speed} ms · ${mood.brightness}% brightness</div>`;
+    weatherUpdatedEl.textContent = new Date().toLocaleTimeString();
+    log(`Weather: ${data.location.name} ${c.temperature.toFixed(1)}°C — ${c.description}`);
+    if (weatherAutoEl.checked) applyWeatherToTable(false);
+  } catch (e) {
+    weatherResultEl.textContent = "Weather lookup failed: " + e.message;
+    log("Weather lookup failed: " + e.message);
+  }
+}
+
+function applyWeatherToEditor() {
+  if (!lastWeather) return;
+  applyMood(lastWeather.mood);
+  moodName.value = `WEATHER_${(lastWeather.location.name || "LOCAL").replace(/[^A-Z0-9]+/gi, "_").toUpperCase()}`;
+  editorMessage.textContent = `Weather mood loaded for ${lastWeather.location.name}. Save it if you want to keep it.`;
+}
+
+async function applyWeatherToTable(showMessage=true) {
+  if (!lastWeather) await getWeather();
+  if (!lastWeather) return;
+  try {
+    const r = await fetch("/api/mood/test", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(lastWeather.mood)});
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error);
+    if (showMessage) log(`Applied weather mood for ${lastWeather.location.name}.`);
+  } catch (e) { log("Weather apply failed: " + e.message); }
+}
+
+async function applyWeatherMood() {
+  await getWeather();
+  await applyWeatherToTable(true);
+}
+
+function updateWeatherTimer() {
+  if (weatherTimer) clearInterval(weatherTimer);
+  weatherTimer = null;
+  if (weatherAutoEl.checked) {
+    weatherTimer = setInterval(() => getWeather(), 15 * 60 * 1000);
+    if (lastWeather) applyWeatherToTable(false);
+  }
+}
+
+async function aiMood(name) {
+  try {
+    const r = await fetch("/api/ai/mood", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mood:name})});
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error);
+    log(`AI mood: ${name}`);
+  } catch (e) { log("AI mood failed: " + e.message); }
+}
+
+async function aiWeatherMood() {
+  const location = weatherLocationEl.value.trim();
+  if (!location) return log("Enter a weather location first.");
+  try {
+    const r = await fetch("/api/ai/mood", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mood:"WEATHER", location})});
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error);
+    log(`AI weather mood applied for ${location}.`);
+  } catch (e) { log("AI weather mood failed: " + e.message); }
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+}
+
 async function checkStatus() {
   try { const r=await fetch("/api/status"); const data=await r.json(); setStatus(data.connected,data.port||""); } catch (_) {}
 }
@@ -246,3 +330,4 @@ renderMatrix();
 refreshPorts();
 checkStatus();
 loadMoods();
+weatherAutoEl.addEventListener("change", updateWeatherTimer);
