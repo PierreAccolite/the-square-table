@@ -1,333 +1,51 @@
-const statusEl = document.getElementById("status");
-const portEl = document.getElementById("port");
-const logEl = document.getElementById("log");
-const connectionLog = document.getElementById("connectionLog");
-const matrixEl = document.getElementById("matrix");
-const paletteEl = document.getElementById("palette");
-const moodSelect = document.getElementById("moodSelect");
-const moodName = document.getElementById("moodName");
-const effectEl = document.getElementById("effect");
-const speedEl = document.getElementById("speed");
-const brightnessEl = document.getElementById("brightness");
-const colorPicker = document.getElementById("colorPicker");
-const colorHex = document.getElementById("colorHex");
-const colorSwatch = document.getElementById("colorSwatch");
-const editorMessage = document.getElementById("editorMessage");
-const weatherLocationEl = document.getElementById("weatherLocation");
-const weatherResultEl = document.getElementById("weatherResult");
-const weatherAutoEl = document.getElementById("weatherAuto");
-const weatherUpdatedEl = document.getElementById("weatherUpdated");
-
-let moods = {};
-let pixels = Array.from({length: 16}, () => [0, 0, 0]);
-let currentColor = [0, 255, 102];
-let lastWeather = null;
-let weatherTimer = null;
-
-const palette = [
-  "#000000", "#FFFFFF", "#FF0000", "#FF6600", "#FFFF00", "#00FF00",
-  "#00FFFF", "#0088FF", "#0000FF", "#8800FF", "#FF00FF", "#FF6699",
-  "#663300", "#888888", "#00FF66", "#66FFCC"
-];
-
-function log(msg) {
-  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  logEl.textContent += (logEl.textContent ? "\n" : "") + line;
-  logEl.scrollTop = logEl.scrollHeight;
-  connectionLog.textContent = line;
-}
-
-function setStatus(connected, port="") {
-  statusEl.className = "status " + (connected ? "connected" : "disconnected");
-  statusEl.textContent = connected ? `🟢 Pico connected — ${port}` : "Pico disconnected";
-}
-
-async function refreshPorts() {
-  try {
-    const r = await fetch("/api/ports");
-    const data = await r.json();
-    portEl.innerHTML = "";
-    if (!data.ports.length) {
-      const opt = document.createElement("option");
-      opt.textContent = "No serial ports found";
-      opt.value = "";
-      portEl.appendChild(opt);
-      log("No serial ports found.");
-      setStatus(false);
-      return;
-    }
-    data.ports.forEach(p => {
-      const opt = document.createElement("option");
-      opt.value = p.device;
-      opt.textContent = `${p.device} — ${p.description}`;
-      portEl.appendChild(opt);
-    });
-    if (data.connected && [...portEl.options].some(o => o.value === data.connected)) portEl.value = data.connected;
-    else portEl.selectedIndex = 0;
-    log("Found serial ports: " + data.ports.map(p => p.device).join(", "));
-  } catch (e) { log("Port refresh failed: " + e); }
-}
-
-async function connectPico() {
-  const port = portEl.value;
-  if (!port) return log("Please select a COM port.");
-  log("Opening " + port + "...");
-  try {
-    const r = await fetch("/api/connect", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({port})});
-    const data = await r.json();
-    if (data.ok) { setStatus(true, data.port); log("Connected to " + data.port); }
-    else { setStatus(false); log("ERROR: " + data.error); }
-  } catch (e) { log("Connect failed: " + e); }
-}
-
-async function disconnectPico() {
-  await fetch("/api/disconnect", {method:"POST"});
-  setStatus(false);
-  log("Disconnected.");
-}
-
-async function sendRaw() {
-  const command = document.getElementById("raw").value.trim();
-  if (command) await send(command);
-}
-
-async function mood(name) { await send(name); }
-
-async function send(command) {
-  try {
-    const r = await fetch("/api/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({command})});
-    const data = await r.json();
-    if (data.ok) log("Sent: " + command); else log("ERROR: " + data.error);
-  } catch (e) { log("Send failed: " + e); }
-}
-
-function rgbFromHex(hex) {
-  const value = hex.replace("#", "");
-  return [parseInt(value.slice(0,2),16), parseInt(value.slice(2,4),16), parseInt(value.slice(4,6),16)];
-}
-
-function hexFromRgb(rgb) {
-  return "#" + rgb.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2,"0")).join("").toUpperCase();
-}
-
-function setCurrentColor(hex) {
-  currentColor = rgbFromHex(hex);
-  colorHex.textContent = hexFromRgb(currentColor);
-  colorSwatch.style.background = hexFromRgb(currentColor);
-}
-
-function buildPalette() {
-  paletteEl.innerHTML = "";
-  palette.forEach(hex => {
-    const b = document.createElement("button");
-    b.className = "swatch";
-    b.style.background = hex;
-    b.title = hex;
-    b.onclick = () => { colorPicker.value = hex; setCurrentColor(hex); };
-    paletteEl.appendChild(b);
-  });
-}
-
-function renderMatrix() {
-  matrixEl.innerHTML = "";
-  pixels.forEach((rgb, index) => {
-    const cell = document.createElement("button");
-    cell.className = "led-cell";
-    cell.style.backgroundColor = hexFromRgb(rgb);
-    cell.style.boxShadow = rgb.some(v => v > 0) ? `0 0 18px ${hexFromRgb(rgb)}` : "none";
-    cell.title = `LED ${index}`;
-    cell.onclick = () => {
-      pixels[index] = [...currentColor];
-      renderMatrix();
-    };
-    matrixEl.appendChild(cell);
-  });
-}
-
-function clearMatrix() {
-  pixels = Array.from({length: 16}, () => [0,0,0]);
-  renderMatrix();
-}
-
-function fillMatrix() {
-  pixels = Array.from({length: 16}, () => [...currentColor]);
-  renderMatrix();
-}
-
-function invertMatrix() {
-  pixels = pixels.map(rgb => rgb.some(v => v > 0) ? [0,0,0] : [...currentColor]);
-  renderMatrix();
-}
-
-function getEditorMood() {
-  return {
-    name: (moodName.value.trim() || "CUSTOM").toUpperCase(),
-    pixels: pixels.map(p => [...p]),
-    effect: effectEl.value,
-    speed: Number(speedEl.value),
-    brightness: Number(brightnessEl.value)
-  };
-}
-
-function applyMood(mood) {
-  if (!mood) return;
-  moodName.value = mood.name || "";
-  pixels = mood.pixels.map(p => [...p]);
-  effectEl.value = mood.effect || "STATIC";
-  speedEl.value = mood.speed || 100;
-  brightnessEl.value = mood.brightness || 100;
-  document.getElementById("speedValue").textContent = speedEl.value;
-  document.getElementById("brightnessValue").textContent = brightnessEl.value;
-  renderMatrix();
-  editorMessage.textContent = `Loaded ${mood.name}`;
-}
-
-async function loadMoods() {
-  try {
-    const r = await fetch("/api/moods");
-    moods = await r.json();
-    moodSelect.innerHTML = "";
-    Object.keys(moods).sort().forEach(name => {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = name;
-      moodSelect.appendChild(option);
-    });
-    if (Object.keys(moods).length) applyMood(moods[Object.keys(moods).sort()[0]]);
-  } catch (e) { editorMessage.textContent = "Could not load moods."; log("Mood load failed: " + e); }
-}
-
-function loadSelectedMood() { applyMood(moods[moodSelect.value]); }
-
-async function saveMood() {
-  const mood = getEditorMood();
-  if (!mood.name || mood.name === "CUSTOM") return editorMessage.textContent = "Enter a mood name first.";
-  try {
-    const r = await fetch("/api/moods", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(mood)});
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error);
-    moods[mood.name] = data.mood;
-    moodSelect.innerHTML = "";
-    Object.keys(moods).sort().forEach(name => {
-      const option = document.createElement("option"); option.value=name; option.textContent=name; moodSelect.appendChild(option);
-    });
-    moodSelect.value = mood.name;
-    editorMessage.textContent = `Saved ${mood.name}.`;
-    log("Saved mood: " + mood.name);
-  } catch (e) { editorMessage.textContent = "Save failed: " + e.message; }
-}
-
-async function deleteMood() {
-  const name = moodSelect.value;
-  if (!name) return;
-  if (!confirm(`Delete mood ${name}?`)) return;
-  try {
-    const r = await fetch(`/api/moods/${encodeURIComponent(name)}`, {method:"DELETE"});
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error);
-    delete moods[name];
-    await loadMoods();
-    editorMessage.textContent = `Deleted ${name}.`;
-  } catch (e) { editorMessage.textContent = "Delete failed: " + e.message; }
-}
-
-async function testMood() {
-  const mood = getEditorMood();
-  try {
-    const r = await fetch("/api/mood/test", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(mood)});
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error);
-    editorMessage.textContent = `Tested ${mood.name} — ${mood.effect}.`;
-    log(`Tested ${mood.name} (${mood.effect})`);
-  } catch (e) { editorMessage.textContent = "Test failed: " + e.message; log("Mood test failed: " + e.message); }
-}
-
-async function getWeather() {
-  const location = weatherLocationEl.value.trim();
-  if (!location) return weatherResultEl.textContent = "Enter a town or city first.";
-  weatherResultEl.textContent = "Looking up weather…";
-  try {
-    const r = await fetch(`/api/weather?location=${encodeURIComponent(location)}`);
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error);
-    lastWeather = data;
-    const c = data.current;
-    const rgb = data.temperature_color;
-    const mood = data.mood;
-    weatherResultEl.innerHTML = `<div class="weather-main"><span class="weather-temp">${c.temperature.toFixed(1)}°C</span><span><strong>${escapeHtml(data.location.name)}, ${escapeHtml(data.location.country || "")}</strong><br>${escapeHtml(c.description)} · wind ${Number(c.wind_speed || 0).toFixed(0)} km/h</span><span class="weather-colour" style="background:rgb(${rgb.join(",")})"></span></div><div class="muted">Generated mood: <strong>${mood.effect}</strong> · ${mood.speed} ms · ${mood.brightness}% brightness</div>`;
-    weatherUpdatedEl.textContent = new Date().toLocaleTimeString();
-    log(`Weather: ${data.location.name} ${c.temperature.toFixed(1)}°C — ${c.description}`);
-    if (weatherAutoEl.checked) applyWeatherToTable(false);
-  } catch (e) {
-    weatherResultEl.textContent = "Weather lookup failed: " + e.message;
-    log("Weather lookup failed: " + e.message);
-  }
-}
-
-function applyWeatherToEditor() {
-  if (!lastWeather) return;
-  applyMood(lastWeather.mood);
-  moodName.value = `WEATHER_${(lastWeather.location.name || "LOCAL").replace(/[^A-Z0-9]+/gi, "_").toUpperCase()}`;
-  editorMessage.textContent = `Weather mood loaded for ${lastWeather.location.name}. Save it if you want to keep it.`;
-}
-
-async function applyWeatherToTable(showMessage=true) {
-  if (!lastWeather) await getWeather();
-  if (!lastWeather) return;
-  try {
-    const r = await fetch("/api/mood/test", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(lastWeather.mood)});
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error);
-    if (showMessage) log(`Applied weather mood for ${lastWeather.location.name}.`);
-  } catch (e) { log("Weather apply failed: " + e.message); }
-}
-
-async function applyWeatherMood() {
-  await getWeather();
-  await applyWeatherToTable(true);
-}
-
-function updateWeatherTimer() {
-  if (weatherTimer) clearInterval(weatherTimer);
-  weatherTimer = null;
-  if (weatherAutoEl.checked) {
-    weatherTimer = setInterval(() => getWeather(), 15 * 60 * 1000);
-    if (lastWeather) applyWeatherToTable(false);
-  }
-}
-
-async function aiMood(name) {
-  try {
-    const r = await fetch("/api/ai/mood", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mood:name})});
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error);
-    log(`AI mood: ${name}`);
-  } catch (e) { log("AI mood failed: " + e.message); }
-}
-
-async function aiWeatherMood() {
-  const location = weatherLocationEl.value.trim();
-  if (!location) return log("Enter a weather location first.");
-  try {
-    const r = await fetch("/api/ai/mood", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mood:"WEATHER", location})});
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error);
-    log(`AI weather mood applied for ${location}.`);
-  } catch (e) { log("AI weather mood failed: " + e.message); }
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
-}
-
-async function checkStatus() {
-  try { const r=await fetch("/api/status"); const data=await r.json(); setStatus(data.connected,data.port||""); } catch (_) {}
-}
-
-buildPalette();
-setCurrentColor("#00FF66");
-renderMatrix();
-refreshPorts();
-checkStatus();
-loadMoods();
-weatherAutoEl.addEventListener("change", updateWeatherTimer);
+const statusEl=document.getElementById("status"),portEl=document.getElementById("port"),logEl=document.getElementById("log"),connectionLog=document.getElementById("connectionLog"),matrixEl=document.getElementById("matrix"),paletteEl=document.getElementById("palette"),moodSelect=document.getElementById("moodSelect"),moodName=document.getElementById("moodName"),effectEl=document.getElementById("effect"),speedEl=document.getElementById("speed"),brightnessEl=document.getElementById("brightness"),colorPicker=document.getElementById("colorPicker"),colorHex=document.getElementById("colorHex"),colorSwatch=document.getElementById("colorSwatch"),editorMessage=document.getElementById("editorMessage"),weatherLocationEl=document.getElementById("weatherLocation"),weatherResultEl=document.getElementById("weatherResult"),weatherAutoEl=document.getElementById("weatherAuto"),weatherUpdatedEl=document.getElementById("weatherUpdated");
+const feedNameEl=document.getElementById("feedName"),feedLoopEl=document.getElementById("feedLoop"),feedListEl=document.getElementById("feedList"),feedSelectEl=document.getElementById("feedSelect"),feedMessageEl=document.getElementById("feedMessage"),sensorResultEl=document.getElementById("sensorResult"),sensorAutoEl=document.getElementById("sensorAuto");
+let moods={},feeds={},pixels=Array.from({length:16},()=>[0,0,0]),currentColor=[0,255,102],lastWeather=null,weatherTimer=null,sensorTimer=null,feedFrames=[];
+const palette=["#000000","#FFFFFF","#FF0000","#FF6600","#FFFF00","#00FF00","#00FFFF","#0088FF","#0000FF","#8800FF","#FF00FF","#FF6699","#663300","#888888","#00FF66","#66FFCC"];
+function log(msg){const line=`[${new Date().toLocaleTimeString()}] ${msg}`;logEl.textContent+=(logEl.textContent?"\n":"")+line;logEl.scrollTop=logEl.scrollHeight;connectionLog.textContent=line}
+function setStatus(c,p=""){statusEl.className="status "+(c?"connected":"disconnected");statusEl.textContent=c?`🟢 Pico connected — ${p}`:"Pico disconnected"}
+async function refreshPorts(){try{const r=await fetch("/api/ports"),d=await r.json();portEl.innerHTML="";if(!d.ports.length){const o=document.createElement("option");o.textContent="No serial ports found";o.value="";portEl.appendChild(o);setStatus(false);return}d.ports.forEach(p=>{const o=document.createElement("option");o.value=p.device;o.textContent=`${p.device} — ${p.description}`;portEl.appendChild(o)});if(d.connected&&[...portEl.options].some(o=>o.value===d.connected))portEl.value=d.connected;else portEl.selectedIndex=0;log("Found serial ports: "+d.ports.map(p=>p.device).join(", "))}catch(e){log("Port refresh failed: "+e)}}
+async function connectPico(){const port=portEl.value;if(!port)return log("Please select a COM port.");log("Opening "+port+"...");try{const r=await fetch("/api/connect",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({port})}),d=await r.json();if(d.ok){setStatus(true,d.port);log("Connected to "+d.port)}else{setStatus(false);log("ERROR: "+d.error)}}catch(e){log("Connect failed: "+e)}}
+async function disconnectPico(){await fetch("/api/disconnect",{method:"POST"});setStatus(false);log("Disconnected.")}
+async function sendRaw(){const c=document.getElementById("raw").value.trim();if(c)await send(c)}
+async function mood(name){await send(name)}
+async function send(command){try{const r=await fetch("/api/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({command})}),d=await r.json();if(d.ok)log("Sent: "+command);else log("ERROR: "+d.error)}catch(e){log("Send failed: "+e)}}
+function rgbFromHex(h){const v=h.replace("#","");return[parseInt(v.slice(0,2),16),parseInt(v.slice(2,4),16),parseInt(v.slice(4,6),16)]}
+function hexFromRgb(rgb){return"#"+rgb.map(v=>Math.max(0,Math.min(255,v)).toString(16).padStart(2,"0")).join("").toUpperCase()}
+function setCurrentColor(hex){currentColor=rgbFromHex(hex);colorHex.textContent=hexFromRgb(currentColor);colorSwatch.style.background=hexFromRgb(currentColor)}
+function buildPalette(){paletteEl.innerHTML="";palette.forEach(hex=>{const b=document.createElement("button");b.className="swatch";b.style.background=hex;b.title=hex;b.onclick=()=>{colorPicker.value=hex;setCurrentColor(hex)};paletteEl.appendChild(b)})}
+function renderMatrix(){matrixEl.innerHTML="";pixels.forEach((rgb,index)=>{const cell=document.createElement("button");cell.className="led-cell";cell.style.backgroundColor=hexFromRgb(rgb);cell.style.boxShadow=rgb.some(v=>v>0)?`0 0 18px ${hexFromRgb(rgb)}`:"none";cell.title=`LED ${index}`;cell.onclick=()=>{pixels[index]=[...currentColor];renderMatrix()};matrixEl.appendChild(cell)})}
+function clearMatrix(){pixels=Array.from({length:16},()=>[0,0,0]);renderMatrix()}
+function fillMatrix(){pixels=Array.from({length:16},()=>[...currentColor]);renderMatrix()}
+function invertMatrix(){pixels=pixels.map(rgb=>rgb.some(v=>v>0)?[0,0,0]:[...currentColor]);renderMatrix()}
+function getEditorMood(){return{name:(moodName.value.trim()||"CUSTOM").toUpperCase(),pixels:pixels.map(p=>[...p]),effect:effectEl.value,speed:Number(speedEl.value),brightness:Number(brightnessEl.value)}}
+function applyMood(m){if(!m)return;moodName.value=m.name||"";pixels=m.pixels.map(p=>[...p]);effectEl.value=m.effect||"STATIC";speedEl.value=m.speed||100;brightnessEl.value=m.brightness||100;document.getElementById("speedValue").textContent=speedEl.value;document.getElementById("brightnessValue").textContent=brightnessEl.value;renderMatrix()}
+async function loadMoods(){try{const r=await fetch("/api/moods");moods=await r.json();moodSelect.innerHTML="";Object.keys(moods).sort().forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;moodSelect.appendChild(o)});if(Object.keys(moods).length){moodSelect.value=Object.keys(moods).sort()[0];applyMood(moods[moodSelect.value])}}catch(e){editorMessage.textContent="Could not load moods.";log("Mood load failed: "+e)}}
+function loadSelectedMood(){applyMood(moods[moodSelect.value])}
+async function saveMood(){const m=getEditorMood();if(!m.name||m.name==="CUSTOM")return editorMessage.textContent="Enter a mood name first.";try{const r=await fetch("/api/moods",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)}),d=await r.json();if(!d.ok)throw Error(d.error);moods[m.name]=d.mood;rebuildMoodSelect(m.name);editorMessage.textContent=`Saved ${m.name}.`;log("Saved mood: "+m.name)}catch(e){editorMessage.textContent="Save failed: "+e.message}}
+function rebuildMoodSelect(selected){moodSelect.innerHTML="";Object.keys(moods).sort().forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;moodSelect.appendChild(o)});if(selected)moodSelect.value=selected}
+async function saveMoodAndNext(){await saveMood();moodName.value="";clearMatrix();currentColor=[0,255,102];setCurrentColor("#00FF66");editorMessage.textContent="Saved. Ready for the next pattern."}
+async function deleteMood(){const n=moodSelect.value;if(!n||!confirm(`Delete mood ${n}?`))return;try{const r=await fetch(`/api/moods/${encodeURIComponent(n)}`,{method:"DELETE"}),d=await r.json();if(!d.ok)throw Error(d.error);delete moods[n];await loadMoods();editorMessage.textContent=`Deleted ${n}.`}catch(e){editorMessage.textContent="Delete failed: "+e.message}}
+async function testMood(){const m=getEditorMood();try{const r=await fetch("/api/mood/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)}),d=await r.json();if(!d.ok)throw Error(d.error);editorMessage.textContent=`Tested ${m.name} — ${m.effect}.`;log(`Tested ${m.name} (${m.effect})`)}catch(e){editorMessage.textContent="Test failed: "+e.message;log("Mood test failed: "+e.message)}}
+function addCurrentToFeed(){const m=getEditorMood();feedFrames.push({pixels:m.pixels.map(p=>[...p]),transition:"FADE",duration:700,hold:700,brightness:m.brightness});renderFeed();feedMessageEl.textContent=`Added ${m.name||"pattern"} as pattern ${feedFrames.length}.`}
+function renderFeed(){feedListEl.innerHTML="";if(!feedFrames.length){feedListEl.innerHTML='<div class="feed-empty">No patterns yet. Create one above, then click <b>Add Current Pattern</b>.</div>';return}feedFrames.forEach((f,i)=>{const item=document.createElement("div");item.className="feed-item";const mini=document.createElement("div");mini.className="feed-mini";f.pixels.forEach(rgb=>{const s=document.createElement("span");s.style.background=hexFromRgb(rgb);mini.appendChild(s)});const info=document.createElement("div");info.className="feed-info";info.innerHTML=`<strong>Pattern ${i+1}</strong><small>Transition into this pattern</small>`;const trans=document.createElement("select");["CUT","FADE","SLIDE_LEFT","SLIDE_RIGHT","SPIN","STAR"].forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v.replaceAll("_"," ");if(v===f.transition)o.selected=true;trans.appendChild(o)});trans.onchange=()=>f.transition=trans.value;const dur=document.createElement("input");dur.type="number";dur.min=100;dur.max=10000;dur.value=f.duration;dur.title="Transition duration (ms)";dur.onchange=()=>f.duration=Number(dur.value);const hold=document.createElement("input");hold.type="number";hold.min=100;hold.max=10000;hold.value=f.hold;hold.title="Hold time (ms)";hold.onchange=()=>f.hold=Number(hold.value);const up=document.createElement("button");up.textContent="↑";up.disabled=i===0;up.onclick=()=>{[feedFrames[i-1],feedFrames[i]]=[feedFrames[i],feedFrames[i-1]];renderFeed()};const down=document.createElement("button");down.textContent="↓";down.disabled=i===feedFrames.length-1;down.onclick=()=>{[feedFrames[i+1],feedFrames[i]]=[feedFrames[i],feedFrames[i+1]];renderFeed()};const del=document.createElement("button");del.textContent="✕";del.className="danger";del.onclick=()=>{feedFrames.splice(i,1);renderFeed()};const controls=document.createElement("div");controls.className="feed-controls";controls.append(info,trans,dur,hold,up,down,del);item.append(mini,controls);feedListEl.appendChild(item)})}
+function clearFeed(){feedFrames=[];renderFeed();feedMessageEl.textContent="Feed cleared."}
+async function saveFeed(){const name=(feedNameEl.value.trim()||"MY_FEED").toUpperCase();if(!feedFrames.length)return feedMessageEl.textContent="Add at least one pattern first.";try{const r=await fetch("/api/feeds",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,frames:feedFrames,loop:feedLoopEl.checked})}),d=await r.json();if(!d.ok)throw Error(d.error);feeds[name]=d.feed;rebuildFeedSelect(name);feedMessageEl.textContent=`Saved feed ${name}.`;log("Saved feed: "+name)}catch(e){feedMessageEl.textContent="Save feed failed: "+e.message}}
+function rebuildFeedSelect(selected){feedSelectEl.innerHTML="";Object.keys(feeds).sort().forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n;feedSelectEl.appendChild(o)});if(selected)feedSelectEl.value=selected}
+async function loadFeeds(){try{const r=await fetch("/api/feeds");feeds=await r.json();rebuildFeedSelect(Object.keys(feeds).sort()[0])}catch(e){feedMessageEl.textContent="Could not load feeds."}}
+async function testFeed(){if(!feedFrames.length)return feedMessageEl.textContent="Add patterns to the feed first.";try{const r=await fetch("/api/feed/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:feedNameEl.value||"LIVE_FEED",frames:feedFrames,loop:feedLoopEl.checked})}),d=await r.json();if(!d.ok)throw Error(d.error);feedMessageEl.textContent="Playing feed.";log("Playing live feed") }catch(e){feedMessageEl.textContent="Feed test failed: "+e.message}}
+async function playSavedFeed(){const n=feedSelectEl.value;if(!n)return;try{const r=await fetch(`/api/feed/play/${encodeURIComponent(n)}`,{method:"POST"}),d=await r.json();if(!d.ok)throw Error(d.error);log("Playing saved feed: "+n)}catch(e){log("Feed play failed: "+e.message)}}
+async function deleteFeed(){const n=feedSelectEl.value;if(!n||!confirm(`Delete feed ${n}?`))return;try{const r=await fetch(`/api/feeds/${encodeURIComponent(n)}`,{method:"DELETE"}),d=await r.json();if(!d.ok)throw Error(d.error);delete feeds[n];rebuildFeedSelect(Object.keys(feeds).sort()[0]);feedMessageEl.textContent=`Deleted ${n}.`}catch(e){feedMessageEl.textContent="Delete feed failed: "+e.message}}
+function nextPatternName(){const n=Object.keys(moods).length+1;return`PATTERN_${n}`}
+async function getWeather(){const location=weatherLocationEl.value.trim();if(!location)return weatherResultEl.textContent="Enter a town or city first.";weatherResultEl.textContent="Looking up weather…";try{const r=await fetch(`/api/weather?location=${encodeURIComponent(location)}`),d=await r.json();if(!d.ok)throw Error(d.error);lastWeather=d;const c=d.current,rgb=d.temperature_color,m=d.mood;weatherResultEl.innerHTML=`<div class="weather-main"><span class="weather-temp">${c.temperature.toFixed(1)}°C</span><span><strong>${escapeHtml(d.location.name)}, ${escapeHtml(d.location.country||"")}</strong><br>${escapeHtml(c.description)} · wind ${Number(c.wind_speed||0).toFixed(0)} km/h</span><span class="weather-colour" style="background:rgb(${rgb.join(",")})"></span></div><div class="muted">Generated mood: <strong>${m.effect}</strong> · ${m.speed} ms · ${m.brightness}% brightness</div>`;weatherUpdatedEl.textContent=new Date().toLocaleTimeString();log(`Weather: ${d.location.name} ${c.temperature.toFixed(1)}°C — ${c.description}`);if(weatherAutoEl.checked)await applyWeatherToTable(false)}catch(e){weatherResultEl.textContent="Weather lookup failed: "+e.message;log("Weather lookup failed: "+e.message)}}
+async function applyWeatherToTable(show=true){if(!lastWeather)return;try{const r=await fetch("/api/mood/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(lastWeather.mood)}),d=await r.json();if(!d.ok)throw Error(d.error);if(show)log(`Applied weather mood for ${lastWeather.location.name}.`)}catch(e){log("Weather apply failed: "+e.message)}}
+async function applyWeatherMood(){await getWeather();await applyWeatherToTable(true)}
+function updateWeatherTimer(){if(weatherTimer)clearInterval(weatherTimer);weatherTimer=weatherAutoEl.checked?setInterval(getWeather,15*60*1000):null}
+async function readLocalSensor(){sensorResultEl.textContent="Reading DHT11…";try{const r=await fetch("/api/local-temperature"),d=await r.json();if(!d.ok)throw Error(d.error);const rgb=d.temperature_color;sensorResultEl.innerHTML=`<div class="sensor-main"><span class="sensor-temp">${Number(d.temperature).toFixed(1)}°C</span><span>Humidity: <strong>${Number(d.humidity).toFixed(1)}%</strong></span><span class="sensor-colour" style="background:rgb(${rgb.join(",")})"></span><code>${hexFromRgb(rgb)}</code></div>`;sensorResultEl.dataset.rgb=JSON.stringify(rgb);log(`Local DHT11: ${Number(d.temperature).toFixed(1)}°C / ${Number(d.humidity).toFixed(1)}%`)}catch(e){sensorResultEl.textContent="Sensor read failed: "+e.message;log("DHT11 read failed: "+e.message)}}
+function updateSensorTimer(){if(sensorTimer)clearInterval(sensorTimer);sensorTimer=sensorAutoEl.checked?setInterval(readLocalSensor,10000):null}
+function applySensorColour(){try{const rgb=JSON.parse(sensorResultEl.dataset.rgb);currentColor=rgb;colorPicker.value=hexFromRgb(rgb);setCurrentColor(hexFromRgb(rgb));fillMatrix();effectEl.value="STATIC";editorMessage.textContent=`Temperature colour ${hexFromRgb(rgb)} loaded into the editor.`}catch(_){editorMessage.textContent="Read the local sensor first."}}
+async function aiMood(name){try{const r=await fetch("/api/ai/mood",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mood:name})}),d=await r.json();if(!d.ok)throw Error(d.error);log(`AI mood: ${name}`)}catch(e){log("AI mood failed: "+e.message)}}
+async function aiWeatherMood(){const location=weatherLocationEl.value.trim();if(!location)return log("Enter a weather location first.");try{const r=await fetch("/api/ai/mood",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mood:"WEATHER",location})}),d=await r.json();if(!d.ok)throw Error(d.error);log(`AI weather mood applied for ${location}.`)}catch(e){log("AI weather mood failed: "+e.message)}}
+function escapeHtml(v){return String(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
+async function checkStatus(){try{const r=await fetch("/api/status"),d=await r.json();setStatus(d.connected,d.port||"")}catch(_){}
+buildPalette();setCurrentColor("#00FF66");renderMatrix();refreshPorts();checkStatus();loadMoods();loadFeeds();sensorAutoEl.addEventListener("change",updateSensorTimer);weatherAutoEl.addEventListener("change",updateWeatherTimer);
