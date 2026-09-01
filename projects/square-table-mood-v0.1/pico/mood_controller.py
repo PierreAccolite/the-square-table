@@ -8,6 +8,32 @@ import uselect
 NUM_LEDS = 16
 LED_PIN = 0
 
+# The physical NeoPixel strip is wired in a serpentine/zig-zag layout.
+# The web editor uses normal left-to-right, top-to-bottom logical order:
+#
+#   0  1  2  3
+#   4  5  6  7
+#   8  9 10 11
+#  12 13 14 15
+#
+# Physical LED order is:
+#
+#   0  1  2  3
+#   7  6  5  4
+#   8  9 10 11
+#  15 14 13 12
+#
+# This keeps the web editor intuitive while translating to the actual
+# NeoPixel wiring here in the Pico firmware.
+MATRIX_MAP = [
+    [0, 1, 2, 3],
+    [7, 6, 5, 4],
+    [8, 9, 10, 11],
+    [15, 14, 13, 12],
+]
+
+LOGICAL_TO_PHYSICAL = [led for row in MATRIX_MAP for led in row]
+
 np = neopixel.NeoPixel(Pin(LED_PIN), NUM_LEDS)
 stdin_poll = uselect.poll()
 stdin_poll.register(sys.stdin, uselect.POLLIN)
@@ -25,9 +51,11 @@ def scale(rgb, brightness):
 
 
 def show_pixels(pixels, brightness=100, offset=0):
-    for i in range(NUM_LEDS):
-        rgb = pixels[(i - offset) % NUM_LEDS]
-        np[i] = scale(rgb, brightness)
+    """Render logical pixels through the physical serpentine mapping."""
+    for logical_index in range(NUM_LEDS):
+        physical_index = LOGICAL_TO_PHYSICAL[logical_index]
+        rgb = pixels[(logical_index - offset) % NUM_LEDS]
+        np[physical_index] = scale(rgb, brightness)
     np.write()
 
 
@@ -48,8 +76,12 @@ def run_custom_mood(payload):
     if effect == "WIPE":
         clear()
         for count in range(1, NUM_LEDS + 1):
-            for i in range(NUM_LEDS):
-                np[i] = scale(pixels[i], brightness) if i < count else (0, 0, 0)
+            for logical_index in range(NUM_LEDS):
+                physical_index = LOGICAL_TO_PHYSICAL[logical_index]
+                np[physical_index] = (
+                    scale(pixels[logical_index], brightness)
+                    if logical_index < count else (0, 0, 0)
+                )
             np.write()
             time.sleep(speed / 1000)
         return
@@ -139,6 +171,7 @@ def show_mood(mood):
 clear()
 print("AI Mood Matrix online")
 print("JSON mood renderer ready")
+print("Serpentine matrix mapping enabled")
 print("READY")
 
 while True:
