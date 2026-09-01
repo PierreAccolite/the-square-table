@@ -26,6 +26,33 @@ def save_feeds(feeds):
     os.replace(tmp, FEEDS_FILE)
 
 
+def read_local_sensor():
+    if not core.serial_conn or not core.serial_conn.is_open:
+        raise RuntimeError("Pico is not connected.")
+
+    core.serial_conn.reset_input_buffer()
+    core.serial_conn.write(b"SENSOR\n")
+    core.serial_conn.flush()
+
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        line = core.serial_conn.readline().decode("utf-8", errors="ignore").strip()
+        if not line:
+            continue
+        if line.startswith("SENSOR:"):
+            line = line[7:].strip()
+        try:
+            sensor = json.loads(line)
+        except ValueError:
+            continue
+        if sensor.get("type") == "sensor":
+            if "error" in sensor:
+                raise RuntimeError(sensor["error"])
+            return float(sensor["temperature"]), float(sensor.get("humidity", 0))
+
+    raise TimeoutError("No DHT11 reading received from Pico.")
+
+
 def register(app):
     @app.get("/api/feeds")
     def feeds():
@@ -60,7 +87,15 @@ def register(app):
             if transition not in valid_transitions:
                 transition = "FADE"
             duration = max(100, min(10000, int(frame.get("duration", 1200))))
-            clean.append({"pixels": clean_pixels, "transition": transition, "duration": duration})
+            hold = max(100, min(10000, int(frame.get("hold", 500))))
+            brightness = max(1, min(100, int(frame.get("brightness", 100))))
+            clean.append({
+                "pixels": clean_pixels,
+                "transition": transition,
+                "duration": duration,
+                "hold": hold,
+                "brightness": brightness
+            })
 
         feeds_data = load_feeds()
         feeds_data[name] = {"name": name, "frames": clean, "loop": loop}
@@ -115,34 +150,48 @@ def register(app):
 
     @app.get("/api/local-temperature")
     def local_temperature():
-        if not core.serial_conn or not core.serial_conn.is_open:
-            return jsonify({"ok": False, "error": "Pico is not connected."}), 409
         try:
-            core.serial_conn.reset_input_buffer()
-            core.serial_conn.write(b"SENSOR\n")
+            temp, humidity = read_local_sensor()
+            return jsonify({
+                "ok": True,
+                "temperature": temp,
+                "humidity": humidity,
+                "temperature_color": core.temperature_color(temp),
+                "timestamp": time.time()
+            })
+        except TimeoutError as e:
+            return jsonify({"ok": False, "error": str(e)}), 504
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/local-temperature/apply")
+    def apply_local_temperature():
+        """Read the DHT11 and immediately display its temperature colour on all LEDs."""
+        try:
+            temp, humidity = read_local_sensor()
+            rgb = core.temperature_color(temp)
+
+            payload = {
+                "type": "mood",
+                "name": "LOCAL_TEMPERATURE",
+                "pixels": [rgb[:] for _ in range(16)],
+                "effect": "STATIC",
+                "speed": 100,
+                "brightness": 100
+            }
+            command = json.dumps(payload, separators=(",", ":"))
+            core.serial_conn.write((command + "\n").encode("utf-8"))
             core.serial_conn.flush()
-            deadline = time.time() + 3
-            while time.time() < deadline:
-                line = core.serial_conn.readline().decode("utf-8", errors="ignore").strip()
-                if not line:
-                    continue
-                if line.startswith("SENSOR:"):
-                    line = line[7:].strip()
-                try:
-                    sensor = json.loads(line)
-                except ValueError:
-                    continue
-                if sensor.get("type") == "sensor":
-                    temp = float(sensor["temperature"])
-                    humidity = float(sensor.get("humidity", 0))
-                    return jsonify({
-                        "ok": True,
-                        "temperature": temp,
-                        "humidity": humidity,
-                        "temperature_color": core.temperature_color(temp),
-                        "timestamp": time.time()
-                    })
-            return jsonify({"ok": False, "error": "No DHT11 reading received from Pico."}), 504
+
+            return jsonify({
+                "ok": True,
+                "temperature": temp,
+                "humidity": humidity,
+                "temperature_color": rgb,
+                "hex": "#%02X%02X%02X" % tuple(rgb)
+            })
+        except TimeoutError as e:
+            return jsonify({"ok": False, "error": str(e)}), 504
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
 
