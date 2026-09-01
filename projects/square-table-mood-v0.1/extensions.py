@@ -71,7 +71,7 @@ def read_local_sensor():
 
 def send_host_command(command):
     if not core.serial_conn or not core.serial_conn.is_open:
-        return
+        raise RuntimeError("Pico is not connected.")
     core.serial_conn.write((command + "\n").encode("utf-8"))
     core.serial_conn.flush()
 
@@ -160,7 +160,6 @@ def register(app):
     def test_feed():
         data = request.get_json(silent=True) or {}
         try:
-            # Live presets are allowed more frames than saved feeds.
             frames = clean_frames(data.get("frames"), 240)
         except ValueError as e:
             return jsonify({"ok": False, "error": str(e)}), 400
@@ -207,27 +206,16 @@ def register(app):
         for pixel in pixels:
             if not isinstance(pixel, list) or len(pixel) != 3:
                 return jsonify({"ok": False, "error": "Each pixel must contain RGB values."}), 400
-        mood = {
-            "name": name,
-            "pixels": [[max(0, min(255, int(v))) for v in p] for p in pixels],
-            "effect": str(data.get("effect", "STATIC")).upper(),
-            "speed": max(10, min(2000, int(data.get("speed", 100)))),
-            "brightness": max(1, min(100, int(data.get("brightness", 100)))),
-            "width": 8 if len(pixels) == 32 else 4
-        }
-        moods = load_matrix_moods()
-        moods[name] = mood
-        save_matrix_moods(moods)
+        mood = {"name": name, "pixels": [[max(0, min(255, int(v))) for v in p] for p in pixels], "effect": str(data.get("effect", "STATIC")).upper(), "speed": max(10, min(2000, int(data.get("speed", 100)))), "brightness": max(1, min(100, int(data.get("brightness", 100)))), "width": 8 if len(pixels) == 32 else 4}
+        moods = load_matrix_moods(); moods[name] = mood; save_matrix_moods(moods)
         return jsonify({"ok": True, "mood": mood})
 
     @app.delete("/api/matrix/moods/<name>")
     def delete_matrix_mood(name):
-        moods = load_matrix_moods()
-        name = name.strip().upper()
+        moods = load_matrix_moods(); name = name.strip().upper()
         if name not in moods:
             return jsonify({"ok": False, "error": "Matrix mood not found."}), 404
-        del moods[name]
-        save_matrix_moods(moods)
+        del moods[name]; save_matrix_moods(moods)
         return jsonify({"ok": True})
 
     @app.post("/api/matrix/test")
@@ -240,13 +228,27 @@ def register(app):
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
 
+    @app.post("/api/host/on")
+    def host_on():
+        try:
+            send_host_command("HOST_ON")
+            return jsonify({"ok": True, "mode": "HOST"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 409
+
+    @app.post("/api/host/off")
+    def host_off():
+        try:
+            send_host_command("HOST_OFF")
+            return jsonify({"ok": True, "mode": "STANDALONE"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 409
+
     @app.post("/api/local-temperature/apply-reading")
     def apply_local_temperature_reading():
         data = request.get_json(silent=True) or {}
         try:
-            temp = float(data["temperature"])
-            humidity = float(data.get("humidity", 0))
-            rgb = core.temperature_color(temp)
+            temp = float(data["temperature"]); humidity = float(data.get("humidity", 0)); rgb = core.temperature_color(temp)
             count = 32 if bool(data.get("wide", False)) else 16
             send_matrix_packet({"name": "LOCAL_TEMPERATURE", "pixels": [rgb[:] for _ in range(count)], "effect": "STATIC", "speed": 100, "brightness": 100})
             return jsonify({"ok": True, "temperature": temp, "humidity": humidity, "temperature_color": rgb, "hex": "#%02X%02X%02X" % tuple(rgb), "pixels": count})
@@ -266,8 +268,7 @@ def register(app):
     @app.post("/api/local-temperature/apply")
     def apply_local_temperature():
         try:
-            temp, humidity, pico_temp = read_local_sensor()
-            rgb = core.temperature_color(temp)
+            temp, humidity, pico_temp = read_local_sensor(); rgb = core.temperature_color(temp)
             send_matrix_packet({"name": "LOCAL_TEMPERATURE", "pixels": [rgb[:] for _ in range(16)], "effect": "STATIC", "speed": 100, "brightness": 100})
             return jsonify({"ok": True, "temperature": temp, "humidity": humidity, "pico_temperature": pico_temp, "temperature_color": rgb, "hex": "#%02X%02X%02X" % tuple(rgb)})
         except TimeoutError as e:
