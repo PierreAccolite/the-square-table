@@ -109,10 +109,19 @@
 
   function addControls() {
     const matrix = document.getElementById('matrix'); if (!matrix || document.getElementById('matrixWide')) return;
-    const tools = matrix.parentElement.querySelector('.matrix-tools'); const box = document.createElement('div'); box.className = 'matrix-mode-controls';
-    box.innerHTML = `<label><input id="matrixWide" type="checkbox"> 4×8 mode — second 4×4 matrix</label><span id="matrixModeText">Current: 4×4 / 16 LEDs</span>`;
-    (tools || matrix).after(box);
-    document.getElementById('matrixWide').addEventListener('change', e => { ensurePixels(); wide = e.target.checked; if (wide && matrixPixels.length === 16) matrixPixels = matrixPixels.concat(blank(16)); if (!wide && matrixPixels.length === 32) matrixPixels = matrixPixels.slice(0,16); document.getElementById('matrixModeText').textContent = `Current: ${wide ? '4×8 / 32 LEDs' : '4×4 / 16 LEDs'}`; render(); });
+    const box = document.createElement('div');
+    box.className = 'matrix-mode-controls';
+    box.innerHTML = `<label><input id="matrixWide" type="checkbox"> <strong>4×8 mode</strong> — second 4×4 matrix</label><span id="matrixModeText">Current: 4×4 / 16 LEDs</span>`;
+    matrix.parentElement.insertBefore(box, matrix);
+    const toggle = document.getElementById('matrixWide');
+    toggle.addEventListener('change', e => {
+      ensurePixels();
+      wide = e.target.checked;
+      if (wide && matrixPixels.length === 16) matrixPixels = matrixPixels.concat(blank(16));
+      if (!wide && matrixPixels.length === 32) matrixPixels = matrixPixels.slice(0,16);
+      document.getElementById('matrixModeText').textContent = `Current: ${wide ? '4×8 / 32 LEDs' : '4×4 / 16 LEDs'}`;
+      render();
+    });
   }
 
   function addPresetUI() {
@@ -152,7 +161,6 @@
 
   function makeRain(frame, count, base, accent) {
     const w = count === 32 ? 8 : 4, h = 4, out = blank(count);
-    // Per-column phase and changing trail lengths prevent a short repeating loop from being obvious.
     for (let c = 0; c < w; c++) {
       const phase = ((c * 37 + frame * 17 + ((frame * (c + 3)) % 11) * 13) % 97) / 97;
       const head = ((frame * (0.65 + (c % 3) * 0.11) + c * 1.9) % (h + 5)) - 1;
@@ -207,5 +215,5 @@
   }
   window.readLocalSensor=wrappedSensorRead;
 
-  document.addEventListener('DOMContentLoaded',()=>{addControls();addPresetUI();matrixPixels=originalGetEditorMood?clonePixels(originalGetEditorMood().pixels):blank(16);render();loadWideMoods();});
+  document.addEventListener('DOMContentLoaded',()=>{addControls();addPresetUI();matrixPixels=originalGetEditorMood?clonePixels(originalGetEditorMood().pixels):blank(16);render();loadWideMoods();if(typeof window.buildPalette==='function')window.buildPalette();});
 })();
