@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Square Table — AI Mood Controller</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>The Square Table</h1>
+  <h2>Physical AI Mood Controller</h2>
+
+  <div id="status" class="status disconnected">Pico disconnected</div>
+
+  <section>
+    <h3>Connection</h3>
+    <div class="row">
+      <select id="port"></select>
+      <button onclick="refreshPorts()">Refresh</button>
+      <button onclick="connectPico()">Connect</button>
+      <button onclick="disconnectPico()">Disconnect</button>
+    </div>
+    <div id="connectionLog" class="log">Ready.</div>
+  </section>
+
+  <section>
+    <h3>AI Mood</h3>
+    <div class="buttons">
+      <button onclick="mood('IDLE')">🌙 Idle</button>
+      <button onclick="mood('HAPPY')">😊 Happy</button>
+      <button onclick="mood('THINKING')">🧠 Thinking</button>
+      <button onclick="mood('OPTIMISTIC')">🌱 Optimistic</button>
+      <button onclick="mood('SKEPTICAL')">🤨 Skeptical</button>
+      <button onclick="mood('AGREEMENT')">✅ Agreement</button>
+      <button onclick="mood('DISAGREEMENT')">⚡ Disagreement</button>
+      <button onclick="mood('ERROR')">🚨 Error</button>
+      <button onclick="mood('BUFFERING')">☕ Human Buffering</button>
+    </div>
+  </section>
+
+  <section>
+    <h3>AI Team</h3>
+    <div class="buttons">
+      <button onclick="mood('GPT_THINKING')">GPT thinking</button>
+      <button onclick="mood('GROK_THINKING')">Grok thinking</button>
+      <button onclick="mood('BOTH_AGREE')">Both agree</button>
+      <button onclick="mood('BOTH_DISAGREE')">Both disagree</button>
+    </div>
+    <p class="muted">These are ready for the richer Square Table protocol later.</p>
+  </section>
+
+  <section>
+    <h3>Raw command</h3>
+    <div class="row">
+      <input id="raw" placeholder="e.g. HAPPY">
+      <button onclick="sendRaw()">Send</button>
+    </div>
+  </section>
+
+  <section>
+    <h3>Log</h3>
+    <pre id="log">Ready.</pre>
+  </section>
+
+  <footer>Local only · v0.1.1</footer>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
