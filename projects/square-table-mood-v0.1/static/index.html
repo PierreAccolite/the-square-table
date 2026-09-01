@@ -35,7 +35,7 @@
 <div class="section-title"><div><h3>🌡 Local Temperature & Humidity</h3><p class="muted">DHT11 connected to the Pico. Temperature is converted to the same blue → red colour scale used by weather moods.</p></div><div class="row compact"><button onclick="readLocalSensor()">Read Sensor</button><label><input id="sensorAuto" type="checkbox"> Auto 10s</label></div></div>
 <div id="sensorResult" class="sensor-result">Connect the Pico and read the local sensor.</div>
 <div class="temp-scale"><span>Cold</span><div class="temperature-gradient"></div><span>Hot</span></div>
-<button class="primary" onclick="applySensorColour()">▶ Use Temperature Colour</button>
+<div class="row sensor-actions"><button onclick="applySensorColour()">🎨 Use Temperature Colour in Editor</button><button id="sensorLedButton" class="primary" onclick="sendSensorTemperatureToLED()">▶ Send Temperature to LEDs</button></div>
 </section>
 
 <section class="weather-card"><div class="section-title"><div><h3>🌦 Dynamic Weather Mood</h3><p class="muted">Enter any town or city. The Table turns temperature and weather into colour and movement.</p></div><div class="row compact"><input id="weatherLocation" placeholder="e.g. Windhoek, Namibia" maxlength="80"><button onclick="getWeather()">Get Weather</button><button class="primary" onclick="applyWeatherMood()">▶ Apply to Table</button></div></div><div id="weatherResult" class="weather-result">Enter a location and fetch the current weather.</div><div class="row weather-options"><label><input id="weatherAuto" type="checkbox"> Auto-refresh every 15 minutes</label><span class="muted">Last update: <span id="weatherUpdated">—</span></span></div></section>
@@ -45,5 +45,5 @@
 <section><h3>AI Team</h3><div class="buttons"><button onclick="mood('GPT_THINKING')">GPT thinking</button><button onclick="mood('GROK_THINKING')">Grok thinking</button><button onclick="mood('BOTH_AGREE')">Both agree</button><button onclick="mood('BOTH_DISAGREE')">Both disagree</button></div></section>
 <section><h3>Raw command</h3><div class="row"><input id="raw" placeholder="e.g. HAPPY"><button onclick="sendRaw()">Send</button></div></section>
 <section><h3>Log</h3><pre id="log">Ready.</pre></section>
-<footer>Local only · v0.4.0 Feed + DHT11</footer>
-</div><script src="/static/app.js"></script></body></html>
+<footer>Local only · v0.4.1 DHT11 Temperature LED</footer>
+</div><script src="/static/app.js"></script><script src="/static/sensor.js"></script></body></html>
