@@ -8,141 +8,42 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>The Square Table</h1>
-    <h2>Physical AI Mood Controller</h2>
-    <div id="status" class="status disconnected">Pico disconnected</div>
-  </header>
+<header>
+<h1>The Square Table</h1><h2>Physical AI Mood Controller</h2>
+<div id="status" class="status disconnected">Pico disconnected</div>
+</header>
+<section><h3>Connection</h3><div class="row"><select id="port"></select><button onclick="refreshPorts()">Refresh</button><button onclick="connectPico()">Connect</button><button onclick="disconnectPico()">Disconnect</button></div><div id="connectionLog" class="log">Ready.</div></section>
 
-  <section>
-    <h3>Connection</h3>
-    <div class="row">
-      <select id="port"></select>
-      <button onclick="refreshPorts()">Refresh</button>
-      <button onclick="connectPico()">Connect</button>
-      <button onclick="disconnectPico()">Disconnect</button>
-    </div>
-    <div id="connectionLog" class="log">Ready.</div>
-  </section>
+<section class="editor-card">
+<div class="section-title"><div><h3>Mood Designer</h3><p class="muted">Paint the 16 LEDs, choose an effect, then save it as a mood.</p></div><div class="row compact"><select id="moodSelect" onchange="loadSelectedMood()"></select><input id="moodName" placeholder="Mood name" maxlength="32"></div></div>
+<div class="editor-layout"><div><div id="matrix" class="matrix"></div><div class="matrix-tools row"><button onclick="clearMatrix()">Clear</button><button onclick="fillMatrix()">Fill</button><button onclick="invertMatrix()">Invert</button></div></div>
+<div class="controls"><label>Colour</label><div class="palette" id="palette"></div><input id="colorPicker" type="color" value="#00ff66" onchange="setCurrentColor(this.value)"><div class="color-readout"><span id="colorSwatch"></span><code id="colorHex">#00FF66</code></div>
+<label>Effect</label><select id="effect"><option value="STATIC">Static</option><option value="WIPE">Wipe</option><option value="SCROLL">Scroll</option><option value="PULSE">Pulse / Breathe</option></select>
+<label>Speed <span id="speedValue">100</span> ms</label><input id="speed" type="range" min="20" max="1000" value="100" oninput="speedValue.textContent=this.value">
+<label>Brightness <span id="brightnessValue">100</span>%</label><input id="brightness" type="range" min="1" max="100" value="100" oninput="brightnessValue.textContent=this.value">
+<div class="action-buttons"><button class="primary" onclick="testMood()">▶ Test</button><button class="success" onclick="saveMood()">💾 Save Mood</button><button onclick="saveMoodAndNext()">💾 Save & Next</button><button class="danger" onclick="deleteMood()">Delete</button></div></div></div>
+<div id="editorMessage" class="editor-message"></div>
+</section>
 
-  <section class="editor-card">
-    <div class="section-title">
-      <div><h3>Mood Designer</h3><p class="muted">Paint the 16 LEDs, choose an effect, then save it as a mood.</p></div>
-      <div class="row compact">
-        <select id="moodSelect" onchange="loadSelectedMood()"></select>
-        <input id="moodName" placeholder="Mood name" maxlength="32">
-      </div>
-    </div>
+<section class="feed-card">
+<div class="section-title"><div><h3>🎞 Pattern Feed</h3><p class="muted">Build a sequence of saved patterns. Each step can fade, slide, spin an arrow or flash a star into the next pattern.</p></div><div class="row compact"><input id="feedName" placeholder="Feed name" maxlength="32"><button class="success" onclick="saveFeed()">💾 Save Feed</button></div></div>
+<div class="feed-builder"><div class="feed-actions row"><button onclick="addCurrentToFeed()">＋ Add Current Pattern</button><button onclick="clearFeed()">Clear Feed</button><button class="primary" onclick="testFeed()">▶ Play Feed</button><label><input id="feedLoop" type="checkbox" checked> Loop</label></div><div id="feedList" class="feed-list"></div><div id="feedMessage" class="editor-message"></div></div>
+<div class="saved-feed-row row"><select id="feedSelect"></select><button onclick="playSavedFeed()">▶ Play Saved</button><button class="danger" onclick="deleteFeed()">Delete Feed</button></div>
+</section>
 
-    <div class="editor-layout">
-      <div>
-        <div id="matrix" class="matrix" aria-label="4 by 4 LED matrix"></div>
-        <div class="matrix-tools row">
-          <button onclick="clearMatrix()">Clear</button>
-          <button onclick="fillMatrix()">Fill</button>
-          <button onclick="invertMatrix()">Invert</button>
-        </div>
-      </div>
+<section class="sensor-card">
+<div class="section-title"><div><h3>🌡 Local Temperature & Humidity</h3><p class="muted">DHT11 connected to the Pico. Temperature is converted to the same blue → red colour scale used by weather moods.</p></div><div class="row compact"><button onclick="readLocalSensor()">Read Sensor</button><label><input id="sensorAuto" type="checkbox"> Auto 10s</label></div></div>
+<div id="sensorResult" class="sensor-result">Connect the Pico and read the local sensor.</div>
+<div class="temp-scale"><span>Cold</span><div class="temperature-gradient"></div><span>Hot</span></div>
+<button class="primary" onclick="applySensorColour()">▶ Use Temperature Colour</button>
+</section>
 
-      <div class="controls">
-        <label>Colour</label>
-        <div class="palette" id="palette"></div>
-        <input id="colorPicker" type="color" value="#00ff66" onchange="setCurrentColor(this.value)">
-        <div class="color-readout"><span id="colorSwatch"></span><code id="colorHex">#00FF66</code></div>
+<section class="weather-card"><div class="section-title"><div><h3>🌦 Dynamic Weather Mood</h3><p class="muted">Enter any town or city. The Table turns temperature and weather into colour and movement.</p></div><div class="row compact"><input id="weatherLocation" placeholder="e.g. Windhoek, Namibia" maxlength="80"><button onclick="getWeather()">Get Weather</button><button class="primary" onclick="applyWeatherMood()">▶ Apply to Table</button></div></div><div id="weatherResult" class="weather-result">Enter a location and fetch the current weather.</div><div class="row weather-options"><label><input id="weatherAuto" type="checkbox"> Auto-refresh every 15 minutes</label><span class="muted">Last update: <span id="weatherUpdated">—</span></span></div></section>
 
-        <label for="effect">Effect</label>
-        <select id="effect">
-          <option value="STATIC">Static</option>
-          <option value="WIPE">Wipe</option>
-          <option value="SCROLL">Scroll</option>
-          <option value="PULSE">Pulse / Breathe</option>
-        </select>
-
-        <label for="speed">Speed <span id="speedValue">100</span> ms</label>
-        <input id="speed" type="range" min="20" max="1000" value="100" oninput="speedValue.textContent=this.value">
-
-        <label for="brightness">Brightness <span id="brightnessValue">100</span>%</label>
-        <input id="brightness" type="range" min="1" max="100" value="100" oninput="brightnessValue.textContent=this.value">
-
-        <div class="action-buttons">
-          <button class="primary" onclick="testMood()">▶ Test</button>
-          <button class="success" onclick="saveMood()">💾 Save Mood</button>
-          <button class="danger" onclick="deleteMood()">Delete</button>
-        </div>
-      </div>
-    </div>
-    <div id="editorMessage" class="editor-message"></div>
-  </section>
-
-  <section class="weather-card">
-    <div class="section-title">
-      <div><h3>🌦 Dynamic Weather Mood</h3><p class="muted">Enter any town or city. The Table turns temperature and weather into colour and movement.</p></div>
-      <div class="row compact">
-        <input id="weatherLocation" placeholder="e.g. Windhoek, Namibia" maxlength="80">
-        <button onclick="getWeather()">Get Weather</button>
-        <button class="primary" onclick="applyWeatherMood()">▶ Apply to Table</button>
-      </div>
-    </div>
-    <div id="weatherResult" class="weather-result">Enter a location and fetch the current weather.</div>
-    <div class="row weather-options">
-      <label><input id="weatherAuto" type="checkbox"> Auto-refresh every 15 minutes</label>
-      <span class="muted">Last update: <span id="weatherUpdated">—</span></span>
-    </div>
-  </section>
-
-  <section class="ai-card">
-    <div class="section-title">
-      <div><h3>🤖 AI Integration</h3><p class="muted">Local AI projects can tell the Square Table what mood to display.</p></div>
-    </div>
-    <div class="api-box">
-      <code>POST /api/ai/mood</code>
-      <span>Examples: <code>{"mood":"HAPPY"}</code> or <code>{"mood":"WEATHER","location":"Windhoek, Namibia"}</code></span>
-    </div>
-    <div class="buttons">
-      <button onclick="aiMood('HAPPY')">AI → Happy</button>
-      <button onclick="aiMood('THINKING')">AI → Thinking</button>
-      <button onclick="aiMood('SKEPTICAL')">AI → Skeptical</button>
-      <button onclick="aiWeatherMood()">AI → Local Weather</button>
-    </div>
-  </section>
-
-  <section>
-    <h3>AI Mood</h3>
-    <div class="buttons">
-      <button onclick="mood('IDLE')">🌙 Idle</button>
-      <button onclick="mood('HAPPY')">😊 Happy</button>
-      <button onclick="mood('THINKING')">🧠 Thinking</button>
-      <button onclick="mood('OPTIMISTIC')">🌱 Optimistic</button>
-      <button onclick="mood('SKEPTICAL')">🤨 Skeptical</button>
-      <button onclick="mood('AGREEMENT')">✅ Agreement</button>
-      <button onclick="mood('DISAGREEMENT')">⚡ Disagreement</button>
-      <button onclick="mood('ERROR')">🚨 Error</button>
-      <button onclick="mood('BUFFERING')">☕ Human Buffering</button>
-    </div>
-  </section>
-
-  <section>
-    <h3>AI Team</h3>
-    <div class="buttons">
-      <button onclick="mood('GPT_THINKING')">GPT thinking</button>
-      <button onclick="mood('GROK_THINKING')">Grok thinking</button>
-      <button onclick="mood('BOTH_AGREE')">Both agree</button>
-      <button onclick="mood('BOTH_DISAGREE')">Both disagree</button>
-    </div>
-  </section>
-
-  <section>
-    <h3>Raw command</h3>
-    <div class="row"><input id="raw" placeholder="e.g. HAPPY"><button onclick="sendRaw()">Send</button></div>
-  </section>
-
-  <section>
-    <h3>Log</h3>
-    <pre id="log">Ready.</pre>
-  </section>
-
-  <footer>Local only · v0.3.0 Weather + AI Mood Engine</footer>
-</div>
-<script src="/static/app.js"></script>
-</body>
-</html>
+<section class="ai-card"><div class="section-title"><div><h3>🤖 AI Integration</h3><p class="muted">Local AI projects can tell the Square Table what mood to display.</p></div></div><div class="api-box"><code>POST /api/ai/mood</code><span>Examples: <code>{"mood":"HAPPY"}</code> or <code>{"mood":"WEATHER","location":"Windhoek, Namibia"}</code></span></div><div class="buttons"><button onclick="aiMood('HAPPY')">AI → Happy</button><button onclick="aiMood('THINKING')">AI → Thinking</button><button onclick="aiMood('SKEPTICAL')">AI → Skeptical</button><button onclick="aiWeatherMood()">AI → Local Weather</button></div></section>
+<section><h3>AI Mood</h3><div class="buttons"><button onclick="mood('IDLE')">🌙 Idle</button><button onclick="mood('HAPPY')">😊 Happy</button><button onclick="mood('THINKING')">🧠 Thinking</button><button onclick="mood('OPTIMISTIC')">🌱 Optimistic</button><button onclick="mood('SKEPTICAL')">🤨 Skeptical</button><button onclick="mood('AGREEMENT')">✅ Agreement</button><button onclick="mood('DISAGREEMENT')">⚡ Disagreement</button><button onclick="mood('ERROR')">🚨 Error</button><button onclick="mood('BUFFERING')">☕ Human Buffering</button></div></section>
+<section><h3>AI Team</h3><div class="buttons"><button onclick="mood('GPT_THINKING')">GPT thinking</button><button onclick="mood('GROK_THINKING')">Grok thinking</button><button onclick="mood('BOTH_AGREE')">Both agree</button><button onclick="mood('BOTH_DISAGREE')">Both disagree</button></div></section>
+<section><h3>Raw command</h3><div class="row"><input id="raw" placeholder="e.g. HAPPY"><button onclick="sendRaw()">Send</button></div></section>
+<section><h3>Log</h3><pre id="log">Ready.</pre></section>
+<footer>Local only · v0.4.0 Feed + DHT11</footer>
+</div><script src="/static/app.js"></script></body></html>
