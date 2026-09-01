@@ -1,4 +1,4 @@
-from machine import Pin
+from machine import Pin, ADC
 import neopixel
 import time
 import sys
@@ -9,6 +9,8 @@ import dht
 MAX_LEDS = 32
 LED_PIN = 0
 DHT_PIN = 15
+AUTO_TEMP_INTERVAL_MS = 10000
+AUTO_TEMP_BRIGHTNESS = 70
 
 MAP_4X4 = [0, 1, 2, 3, 7, 6, 5, 4, 8, 9, 10, 11, 15, 14, 13, 12]
 MAP_4X8 = [
@@ -20,8 +22,13 @@ MAP_4X8 = [
 
 np = neopixel.NeoPixel(Pin(LED_PIN), MAX_LEDS)
 sensor = dht.DHT11(Pin(DHT_PIN))
+pico_adc = ADC(4)
 stdin_poll = uselect.poll()
 stdin_poll.register(sys.stdin, uselect.POLLIN)
+
+host_active = False
+last_auto_temp_ms = time.ticks_ms()
+last_temp = None
 
 
 def clear():
@@ -41,7 +48,8 @@ def scale(rgb, brightness):
 
 def show_pixels(pixels, brightness=100, offset=0):
     mapping = mapping_for(pixels)
-    clear()
+    for i in range(MAX_LEDS):
+        np[i] = (0, 0, 0)
     count = len(pixels)
     for logical_index in range(count):
         physical_index = mapping[logical_index]
@@ -65,6 +73,62 @@ def check_command():
     if stdin_poll.poll(0):
         return sys.stdin.readline().strip()
     return None
+
+
+def temperature_color(temp):
+    stops = [
+        (-10, (0, 70, 255)),
+        (0, (0, 180, 255)),
+        (10, (0, 255, 180)),
+        (20, (80, 255, 0)),
+        (25, (255, 220, 0)),
+        (30, (255, 120, 0)),
+        (35, (255, 35, 0)),
+        (40, (150, 0, 0)),
+    ]
+    if temp <= stops[0][0]:
+        return stops[0][1]
+    if temp >= stops[-1][0]:
+        return stops[-1][1]
+    for (t1, c1), (t2, c2) in zip(stops, stops[1:]):
+        if t1 <= temp <= t2:
+            f = (temp - t1) / (t2 - t1)
+            return tuple(int(c1[i] + (c2[i] - c1[i]) * f) for i in range(3))
+    return (255, 255, 255)
+
+
+def read_dht():
+    try:
+        sensor.measure()
+        return sensor.temperature(), sensor.humidity(), None
+    except Exception as e:
+        return None, None, str(e)
+
+
+def read_pico_temperature():
+    reading = pico_adc.read_u16()
+    voltage = reading * 3.3 / 65535
+    return 27 - (voltage - 0.706) / 0.001721
+
+
+def show_temperature(temp, brightness=AUTO_TEMP_BRIGHTNESS, count=16):
+    rgb = temperature_color(temp)
+    show_pixels([rgb] * count, brightness)
+
+
+def automatic_temperature_update(force=False):
+    global last_auto_temp_ms, last_temp
+    if host_active and not force:
+        return
+    temp, humidity, error = read_dht()
+    last_auto_temp_ms = time.ticks_ms()
+    if temp is not None:
+        last_temp = temp
+        show_temperature(temp)
+        print("AUTO_TEMP %.1f %.1f" % (temp, humidity))
+    elif force:
+        show_pixels([(0, 40, 120)] * 16, 40)
+        print("AUTO_TEMP_ERROR", error)
 
 
 def blend(a, b, amount):
@@ -114,41 +178,29 @@ def transition(current, target, kind, duration, brightness):
         show_pixels(target, brightness)
         return None
 
-    if kind == "SPIN":
-        center = width // 2
-        points = [
-            [center - 1, center, width + center, 2 * width + center, 3 * width + center, 3 * width + center - 1, 2 * width + center - 1, width + center - 1],
-            [center, center + 1, width + center + 1, 2 * width + center + 1, 3 * width + center + 1, 3 * width + center, 2 * width + center, width + center],
-            [center + 1, width + center + 1, 2 * width + center + 1, 3 * width + center + 1, 3 * width + center, 3 * width + center - 1, 2 * width + center - 1, width + center - 1],
-            [width + center + 1, 2 * width + center + 1, 3 * width + center + 1, 3 * width + center, 3 * width + center - 1, 2 * width + center - 1, width + center - 1, center],
-        ]
-        for arrow in points:
-            frame = [(0, 0, 0)] * count
-            for i in arrow:
-                if 0 <= i < count:
-                    frame[i] = (255, 255, 255)
+    if kind in ("SPIN", "STAR"):
+        frames = []
+        if kind == "SPIN":
+            for n in range(4):
+                frame = [(0, 0, 0)] * count
+                c = max(0, min(width - 1, [width // 2, width - 1, width // 2, 0][n]))
+                r = [0, height // 2, height - 1, height // 2][n]
+                frame[r * width + c] = (255, 255, 255)
+                frames.append(frame)
+        else:
+            center = (height // 2) * width + (width // 2)
+            frames = []
+            for radius in range(1, 4):
+                frame = [(0, 0, 0)] * count
+                for r in range(height):
+                    for c in range(width):
+                        if abs(r - height // 2) + abs(c - width // 2) == radius:
+                            frame[r * width + c] = (255, 255, 255)
+                frame[center] = (255, 255, 255)
+                frames.append(frame)
+        for frame in frames:
             show_pixels(frame, brightness)
-            time.sleep(max(0.04, duration / 4 / 1000))
-            cmd = check_command()
-            if cmd:
-                return cmd
-        show_pixels(target, brightness)
-        return None
-
-    if kind == "STAR":
-        cx = width // 2
-        points = [
-            [1 * width + cx - 1, 1 * width + cx],
-            [cx - 1, cx, width + cx - 1, width + cx, 2 * width + cx - 1, 2 * width + cx, 3 * width + cx - 1, 3 * width + cx],
-            [0, width - 1, count - width, count - 1, width + cx - 1, width + cx, 2 * width + cx - 1, 2 * width + cx],
-        ]
-        for star in points:
-            frame = [(0, 0, 0)] * count
-            for i in star:
-                if 0 <= i < count:
-                    frame[i] = (255, 255, 255)
-            show_pixels(frame, brightness)
-            time.sleep(max(0.05, duration / 3 / 1000))
+            time.sleep(max(0.04, duration / len(frames) / 1000))
             cmd = check_command()
             if cmd:
                 return cmd
@@ -227,7 +279,7 @@ def run_feed(payload):
             current = pixels
             if cmd:
                 return cmd
-            hold = max(100, min(10000, int(frame.get("hold", 500)))) if isinstance(frame, dict) else 500
+            hold = max(20, min(10000, int(frame.get("hold", 500)))) if isinstance(frame, dict) else 500
             end = time.ticks_add(time.ticks_ms(), hold)
             while time.ticks_diff(end, time.ticks_ms()) > 0:
                 time.sleep_ms(30)
@@ -239,11 +291,14 @@ def run_feed(payload):
 
 
 def read_sensor():
-    try:
-        sensor.measure()
-        return {"type": "sensor", "temperature": sensor.temperature(), "humidity": sensor.humidity()}
-    except Exception as e:
-        return {"type": "sensor", "error": str(e)}
+    temp, humidity, error = read_dht()
+    result = {"type": "sensor", "pico_temperature": round(read_pico_temperature(), 1)}
+    if temp is None:
+        result["error"] = error
+    else:
+        result["temperature"] = temp
+        result["humidity"] = humidity
+    return result
 
 
 def breathing(r, g, b):
@@ -293,15 +348,19 @@ def show_mood(mood):
     else: clear()
 
 
-clear()
+# Stand-alone mode: after power-up the Pico is a DHT11 temperature indicator.
+# Connecting the PC sends HOST_ON and takes control away from this mode.
+automatic_temperature_update(force=True)
 print("AI Mood Matrix online")
-print("JSON mood renderer ready")
-print("Serpentine matrix mapping enabled")
-print("4x8 / 32 LED mode supported")
-print("DHT11 sensor on GP15")
+print("Stand-alone DHT11 temperature mode ready")
+print("Pico internal temperature sensor available")
+print("4x4 / 4x8 mode supported")
 print("READY")
 
 while True:
+    if not host_active and time.ticks_diff(time.ticks_ms(), last_auto_temp_ms) >= AUTO_TEMP_INTERVAL_MS:
+        automatic_temperature_update()
+
     events = stdin_poll.poll(100)
     if not events:
         continue
@@ -310,7 +369,18 @@ while True:
     if not command:
         continue
 
-    if command.upper() == "SENSOR":
+    upper = command.upper()
+    if upper == "HOST_ON":
+        host_active = True
+        print("HOST_ON")
+        continue
+    if upper == "HOST_OFF":
+        host_active = False
+        automatic_temperature_update(force=True)
+        print("HOST_OFF")
+        print("READY")
+        continue
+    if upper == "SENSOR":
         print(json.dumps(read_sensor(), separators=(",", ":")))
         print("READY")
         continue
