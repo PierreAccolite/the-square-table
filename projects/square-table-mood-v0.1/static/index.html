@@ -74,6 +74,38 @@
     <div id="editorMessage" class="editor-message"></div>
   </section>
 
+  <section class="weather-card">
+    <div class="section-title">
+      <div><h3>🌦 Dynamic Weather Mood</h3><p class="muted">Enter any town or city. The Table turns temperature and weather into colour and movement.</p></div>
+      <div class="row compact">
+        <input id="weatherLocation" placeholder="e.g. Windhoek, Namibia" maxlength="80">
+        <button onclick="getWeather()">Get Weather</button>
+        <button class="primary" onclick="applyWeatherMood()">▶ Apply to Table</button>
+      </div>
+    </div>
+    <div id="weatherResult" class="weather-result">Enter a location and fetch the current weather.</div>
+    <div class="row weather-options">
+      <label><input id="weatherAuto" type="checkbox"> Auto-refresh every 15 minutes</label>
+      <span class="muted">Last update: <span id="weatherUpdated">—</span></span>
+    </div>
+  </section>
+
+  <section class="ai-card">
+    <div class="section-title">
+      <div><h3>🤖 AI Integration</h3><p class="muted">Local AI projects can tell the Square Table what mood to display.</p></div>
+    </div>
+    <div class="api-box">
+      <code>POST /api/ai/mood</code>
+      <span>Examples: <code>{"mood":"HAPPY"}</code> or <code>{"mood":"WEATHER","location":"Windhoek, Namibia"}</code></span>
+    </div>
+    <div class="buttons">
+      <button onclick="aiMood('HAPPY')">AI → Happy</button>
+      <button onclick="aiMood('THINKING')">AI → Thinking</button>
+      <button onclick="aiMood('SKEPTICAL')">AI → Skeptical</button>
+      <button onclick="aiWeatherMood()">AI → Local Weather</button>
+    </div>
+  </section>
+
   <section>
     <h3>AI Mood</h3>
     <div class="buttons">
@@ -109,7 +141,7 @@
     <pre id="log">Ready.</pre>
   </section>
 
-  <footer>Local only · v0.2.0 Mood Designer</footer>
+  <footer>Local only · v0.3.0 Weather + AI Mood Engine</footer>
 </div>
 <script src="/static/app.js"></script>
 </body>
