@@ -10,12 +10,7 @@ MAX_LEDS = 32
 LED_PIN = 0
 DHT_PIN = 15
 
-# 4x4 matrix: serpentine physical wiring.
 MAP_4X4 = [0, 1, 2, 3, 7, 6, 5, 4, 8, 9, 10, 11, 15, 14, 13, 12]
-
-# 4x8 logical matrix: serpentine physical wiring.
-# If the second physical 4x4 is joined in a different orientation, this is
-# the only table that needs changing.
 MAP_4X8 = [
     0, 1, 2, 3, 4, 5, 6, 7,
     15, 14, 13, 12, 11, 10, 9, 8,
@@ -121,15 +116,15 @@ def transition(current, target, kind, duration, brightness):
 
     if kind == "SPIN":
         center = width // 2
-        rings = [
-            [(center - 1), (center), width + center, 2 * width + center, 3 * width + center, 3 * width + center - 1, 2 * width + center - 1, width + center - 1],
+        points = [
+            [center - 1, center, width + center, 2 * width + center, 3 * width + center, 3 * width + center - 1, 2 * width + center - 1, width + center - 1],
             [center, center + 1, width + center + 1, 2 * width + center + 1, 3 * width + center + 1, 3 * width + center, 2 * width + center, width + center],
             [center + 1, width + center + 1, 2 * width + center + 1, 3 * width + center + 1, 3 * width + center, 3 * width + center - 1, 2 * width + center - 1, width + center - 1],
             [width + center + 1, 2 * width + center + 1, 3 * width + center + 1, 3 * width + center, 3 * width + center - 1, 2 * width + center - 1, width + center - 1, center],
         ]
-        for points in rings:
+        for arrow in points:
             frame = [(0, 0, 0)] * count
-            for i in points:
+            for i in arrow:
                 if 0 <= i < count:
                     frame[i] = (255, 255, 255)
             show_pixels(frame, brightness)
@@ -142,14 +137,14 @@ def transition(current, target, kind, duration, brightness):
 
     if kind == "STAR":
         cx = width // 2
-        star_frames = [
+        points = [
             [1 * width + cx - 1, 1 * width + cx],
-            [0 * width + cx - 1, 0 * width + cx, 1 * width + cx - 1, 1 * width + cx, 2 * width + cx - 1, 2 * width + cx, 3 * width + cx - 1, 3 * width + cx],
-            [0, width - 1, count - width, count - 1, 1 * width + cx - 1, 1 * width + cx, 2 * width + cx - 1, 2 * width + cx],
+            [cx - 1, cx, width + cx - 1, width + cx, 2 * width + cx - 1, 2 * width + cx, 3 * width + cx - 1, 3 * width + cx],
+            [0, width - 1, count - width, count - 1, width + cx - 1, width + cx, 2 * width + cx - 1, 2 * width + cx],
         ]
-        for points in star_frames:
+        for star in points:
             frame = [(0, 0, 0)] * count
-            for i in points:
+            for i in star:
                 if 0 <= i < count:
                     frame[i] = (255, 255, 255)
             show_pixels(frame, brightness)
@@ -178,7 +173,10 @@ def run_custom_mood(payload):
         return None
     if effect == "WIPE":
         for count in range(1, len(pixels) + 1):
-            show_pixels(pixels[:count], brightness)
+            frame = list(pixels)
+            for i in range(count, len(frame)):
+                frame[i] = (0, 0, 0)
+            show_pixels(frame, brightness)
             time.sleep(speed / 1000)
             cmd = check_command()
             if cmd:
