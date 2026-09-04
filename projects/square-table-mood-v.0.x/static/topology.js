@@ -45,11 +45,7 @@
         const [rows, cols] = button.dataset.layout.split(',').map(Number);
         planner([rows, cols]);
         const wide = rows === 1 && cols === 2;
-        const toggle = document.getElementById('matrixWide');
-        if (toggle) {
-          toggle.checked = wide;
-          toggle.dispatchEvent(new Event('change'));
-        }
+        if (typeof window.setMatrixWide === 'function') window.setMatrixWide(wide);
         if (rows > 1) {
           const msg = document.getElementById('editorMessage');
           if (msg) msg.textContent = 'Planning view selected. The editor remains at the supported 4×4/4×8 hardware size for now.';
