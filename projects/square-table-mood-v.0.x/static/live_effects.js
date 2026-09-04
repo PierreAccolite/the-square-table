@@ -6,11 +6,22 @@
   }
   function setMessage(text) { const box = ui('presetMessage'); if (box) box.textContent = text; }
 
+  // Use the same 4x4 / 4x8 selection as the unified Matrix Studio.
+  function getMatrixWidth() {
+    try {
+      if (typeof window.getEditorMood === 'function') {
+        const mood = window.getEditorMood();
+        if (Number(mood.width) === 8 || (Array.isArray(mood.pixels) && mood.pixels.length === 32)) return 8;
+      }
+    } catch (_) {}
+    return ui('matrixWide')?.checked ? 8 : 4;
+  }
+
   window.matrixPreset = async function (name) {
-    const wide = !!ui('matrixWide')?.checked;
-    const count = wide ? 32 : 16;
+    const width = getMatrixWidth();
+    const count = width === 8 ? 32 : 16;
     const brightness = Number(ui('presetBrightness')?.value || 70);
-    let payload = { name, width: wide ? 8 : 4, brightness };
+    let payload = { name, width, brightness };
 
     if (name === 'CODE_RAIN') {
       payload.type = 'effect';
@@ -29,10 +40,10 @@
       try {
         const el = document.querySelector('.sensor-temp');
         const temp = el ? parseFloat(el.textContent) : 20;
-        const r = await fetch('/api/local-temperature/apply-reading', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({temperature:Number.isFinite(temp) ? temp : 20, wide}) });
+        const r = await fetch('/api/local-temperature/apply-reading', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({temperature:Number.isFinite(temp) ? temp : 20, wide: width === 8}) });
         const d = await r.json();
         if (!d.ok) throw Error(d.error);
-        setMessage(`🌡 ${temp.toFixed(1)}°C → ${d.hex} on ${count} LEDs.`);
+        setMessage(`🌡 ${temp.toFixed(1)}°C → ${d.hex} on ${count} LEDs (${width === 8 ? '4×8' : '4×4'}).`);
         return;
       } catch (e) { setMessage('Temperature preset failed: ' + e.message); return; }
     } else return;
@@ -41,8 +52,8 @@
       const r = await fetch('/api/effect/start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
       const d = await r.json();
       if (!d.ok) throw Error(d.error);
-      setMessage(`▶ ${name.replaceAll('_',' ')} running continuously — ${count} LEDs, ${brightness}% brightness.`);
-      if (typeof log === 'function') log(`Live effect started: ${name}`);
+      setMessage(`▶ ${name.replaceAll('_',' ')} running continuously — ${width === 8 ? '4×8 / 32 LEDs' : '4×4 / 16 LEDs'}, ${brightness}% brightness.`);
+      if (typeof log === 'function') log(`Live effect started: ${name} (${width === 8 ? '4×8 / 32 LEDs' : '4×4 / 16 LEDs'})`);
     } catch (e) {
       setMessage('Preset failed: ' + e.message);
       if (typeof log === 'function') log('Live effect failed: ' + e.message);
