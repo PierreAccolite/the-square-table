@@ -15,7 +15,15 @@ AUTO_TEMP_INTERVAL_MS = 10000
 AUTO_TEMP_BRIGHTNESS = 70
 
 MAP_4X4 = [0,1,2,3,7,6,5,4,8,9,10,11,15,14,13,12]
-MAP_4X8 = [0,1,2,3,4,5,6,7,15,14,13,12,11,10,9,8,16,17,18,19,20,21,22,23,31,30,29,28,27,26,25,24]
+# Actual 4x8 hardware mapping derived from the physical test pattern.
+# Logical/web positions are row-major A1..H4.
+# This is NOT the conventional horizontal serpentine map.
+MAP_4X8 = [
+    0,1,2,3,11,10,9,8,
+    24,25,26,27,19,18,17,16,
+    4,5,6,7,15,14,13,12,
+    28,29,30,31,23,22,21,20
+]
 
 np = neopixel.NeoPixel(Pin(LED_PIN), MAX_LEDS)
 sensor = dht.DHT11(Pin(DHT_PIN))
