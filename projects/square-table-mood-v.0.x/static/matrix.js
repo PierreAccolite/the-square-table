@@ -47,6 +47,17 @@
   }
 
   window.renderMatrix = render;
+  window.setMatrixWide = function (value) {
+    wide = !!value;
+    ensurePixels();
+    if (wide && matrixPixels.length === 16) matrixPixels = matrixPixels.concat(blank(16));
+    if (!wide && matrixPixels.length === 32) matrixPixels = matrixPixels.slice(0, 16);
+    const toggle = document.getElementById('matrixWide');
+    if (toggle) toggle.checked = wide;
+    const modeText = document.getElementById('matrixModeText');
+    if (modeText) modeText.textContent = `Current: ${wide ? '4×8 / 32 LEDs' : '4×4 / 16 LEDs'}`;
+    render();
+  };
   window.getEditorMood = function () {
     ensurePixels();
     const effect = document.getElementById('effect'), speed = document.getElementById('speed'), brightness = document.getElementById('brightness'), name = document.getElementById('moodName');
@@ -115,12 +126,7 @@
     matrix.parentElement.insertBefore(box, matrix);
     const toggle = document.getElementById('matrixWide');
     toggle.addEventListener('change', e => {
-      ensurePixels();
-      wide = e.target.checked;
-      if (wide && matrixPixels.length === 16) matrixPixels = matrixPixels.concat(blank(16));
-      if (!wide && matrixPixels.length === 32) matrixPixels = matrixPixels.slice(0,16);
-      document.getElementById('matrixModeText').textContent = `Current: ${wide ? '4×8 / 32 LEDs' : '4×4 / 16 LEDs'}`;
-      render();
+      window.setMatrixWide(e.target.checked);
     });
   }
 
