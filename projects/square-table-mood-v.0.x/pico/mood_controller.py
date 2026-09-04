@@ -1,4 +1,4 @@
-from machine import Pin, ADC
+from machine import Pin, ADC, I2C
 import neopixel
 import time
 import sys
@@ -14,15 +14,20 @@ DHT_PIN = 15
 AUTO_TEMP_INTERVAL_MS = 10000
 AUTO_TEMP_BRIGHTNESS = 70
 
+# 16x2 LCD with the common PCF8574T I2C backpack.
+# The LCD remains independent of the LED mood/effect engine.
+LCD_SDA_PIN = 4
+LCD_SCL_PIN = 5
+LCD_I2C_ADDRESS = 0x27
+LCD_UPDATE_INTERVAL_MS = 10000
+
 MAP_4X4 = [0,1,2,3,7,6,5,4,8,9,10,11,15,14,13,12]
-# Actual 4x8 hardware mapping derived from the physical test pattern.
-# Logical/web positions are row-major A1..H4.
-# This is NOT the conventional horizontal serpentine map.
+# Confirmed 4x8 hardware mapping: two horizontally chained 4x4 serpentine panels.
 MAP_4X8 = [
-    0,1,2,3,11,10,9,8,
-    24,25,26,27,19,18,17,16,
-    4,5,6,7,15,14,13,12,
-    28,29,30,31,23,22,21,20
+    0,1,2,3,16,17,18,19,
+    7,6,5,4,23,22,21,20,
+    8,9,10,11,24,25,26,27,
+    15,14,13,12,31,30,29,28
 ]
 
 np = neopixel.NeoPixel(Pin(LED_PIN), MAX_LEDS)
@@ -31,9 +36,84 @@ pico_adc = ADC(4)
 poll = uselect.poll()
 poll.register(sys.stdin, uselect.POLLIN)
 
+# -----------------------------------------------------------------------------
+# 16x2 I2C LCD driver (PCF8574T, address 0x27)
+# -----------------------------------------------------------------------------
+class I2CLcd:
+    def __init__(self, i2c, address=0x27):
+        self.i2c = i2c
+        self.address = address
+        self.backlight = 0x08
+        self._init_lcd()
+
+    def _write(self, value):
+        self.i2c.writeto(self.address, bytes([value | self.backlight]))
+
+    def _pulse(self, value):
+        self._write(value | 0x04)
+        time.sleep_us(1)
+        self._write(value & ~0x04)
+        time.sleep_us(50)
+
+    def _send_nibble(self, nibble, rs=0):
+        value = (nibble & 0xF0) | rs
+        self._pulse(value)
+
+    def _send(self, value, rs=0):
+        self._send_nibble(value & 0xF0, rs)
+        self._send_nibble((value << 4) & 0xF0, rs)
+
+    def command(self, value):
+        self._send(value, 0)
+        if value in (0x01, 0x02):
+            time.sleep_ms(2)
+
+    def putchar(self, value):
+        self._send(ord(value), 1)
+
+    def puts(self, text, row=0):
+        text = str(text)[:16].ljust(16)
+        self.command(0x80 if row == 0 else 0xC0)
+        for char in text:
+            self.putchar(char)
+
+    def clear(self):
+        self.command(0x01)
+
+    def _init_lcd(self):
+        time.sleep_ms(50)
+        self._write(0x00)
+        # Standard HD44780 4-bit initialization sequence.
+        self._send_nibble(0x30); time.sleep_ms(5)
+        self._send_nibble(0x30); time.sleep_us(150)
+        self._send_nibble(0x30); time.sleep_us(150)
+        self._send_nibble(0x20); time.sleep_us(150)
+        self.command(0x28)  # 4-bit, 2-line, 5x8 font
+        self.command(0x08)  # display off
+        self.command(0x01)  # clear
+        self.command(0x06)  # entry mode
+        self.command(0x0C)  # display on, cursor off
+        self.clear()
+
+lcd = None
+try:
+    lcd_i2c = I2C(0, scl=Pin(LCD_SCL_PIN), sda=Pin(LCD_SDA_PIN), freq=100000)
+    lcd_devices = lcd_i2c.scan()
+    if LCD_I2C_ADDRESS in lcd_devices:
+        lcd = I2CLcd(lcd_i2c, LCD_I2C_ADDRESS)
+        lcd.puts("SQUARE TABLE", 0)
+        lcd.puts("LCD ONLINE", 1)
+        print("LCD ONLINE 0x27 GP4/GP5")
+    else:
+        print("LCD NOT FOUND", lcd_devices)
+except Exception as e:
+    print("LCD INIT ERROR", e)
+
 host_active = False
 last_auto_temp_ms = time.ticks_ms()
+last_lcd_update_ms = time.ticks_ms()
 last_temp = None
+last_humidity = None
 active_effect = None
 rain_state = None
 cloud_state = None
@@ -113,15 +193,43 @@ def read_pico_temperature():
 def show_temperature(temp, brightness=AUTO_TEMP_BRIGHTNESS, count=16): show_pixels([temperature_color(temp)]*count,brightness)
 
 
-def automatic_temperature_update(force=False):
-    global last_auto_temp_ms,last_temp
-    if host_active and not force: return
+def update_lcd(temp, humidity, error=None):
+    if lcd is None: return
+    try:
+        if temp is not None and humidity is not None:
+            lcd.puts("TEMP:%5.1f C" % temp, 0)
+            lcd.puts("HUM :%5.1f %%" % humidity, 1)
+        elif error:
+            lcd.puts("DHT11 ERROR", 0)
+            lcd.puts("Retrying...", 1)
+    except Exception as e:
+        print("LCD UPDATE ERROR", e)
+
+
+def update_sensor_state(update_led=False, force=False):
+    global last_auto_temp_ms,last_lcd_update_ms,last_temp,last_humidity
     temp,humidity,error=read_dht(2)
     last_auto_temp_ms=time.ticks_ms()
+    last_lcd_update_ms=time.ticks_ms()
     if temp is not None:
-        last_temp=temp; show_temperature(temp); print("AUTO_TEMP %.1f %.1f"%(temp,humidity))
-    elif force:
-        show_pixels([(0,35,120)]*16,55); print("AUTO_TEMP_ERROR",error)
+        last_temp=temp
+        last_humidity=humidity
+        update_lcd(temp,humidity)
+        if update_led:
+            show_temperature(temp)
+        print("AUTO_TEMP %.1f %.1f"%(temp,humidity))
+    else:
+        update_lcd(None,None,error)
+        if force and update_led:
+            show_pixels([(0,35,120)]*16,55)
+            print("AUTO_TEMP_ERROR",error)
+
+
+def automatic_temperature_update(force=False):
+    # Sensor/LCD updates continue even when the web host is connected.
+    # The LED temperature mood only runs while the host is idle and no live
+    # effect is active, preserving whatever the web UI is currently showing.
+    update_sensor_state(update_led=(not host_active and active_effect is None), force=force)
 
 
 def stop_live_effect():
@@ -306,18 +414,21 @@ def handle_command(command):
     active_effect=None; show_mood(command); print("READY")
 
 
-# Give the DHT11 a moment after power-up. The first measurement can otherwise fail.
+# Give the DHT11 and LCD a moment after power-up.
 time.sleep_ms(1200)
 automatic_temperature_update(force=True)
 print("AI Mood Matrix online")
 print("Stand-alone DHT11 temperature mode ready")
 print("Pico internal temperature sensor available")
+print("I2C LCD 16x2 support enabled")
 print("4x4 / 4x8 mode supported")
 print("Live effects use non-blocking state engine")
 print("READY")
 
 while True:
-    if not host_active and active_effect is None and time.ticks_diff(time.ticks_ms(),last_auto_temp_ms)>=AUTO_TEMP_INTERVAL_MS: automatic_temperature_update()
+    # Keep the LCD/DHT11 alive independently of the web host and LED effects.
+    if time.ticks_diff(time.ticks_ms(),last_lcd_update_ms)>=LCD_UPDATE_INTERVAL_MS:
+        update_sensor_state(update_led=(not host_active and active_effect is None))
     command=check_command()
     if command: handle_command(command)
     elif active_effect is not None: step_live_effect()
