@@ -6,7 +6,6 @@ import app as core
 from flask import jsonify, request
 
 FEEDS_FILE = os.path.join(core.BASE_DIR, "feeds.json")
-MATRIX_MOODS_FILE = os.path.join(core.BASE_DIR, "matrix_moods.json")
 
 
 def load_feeds():
@@ -23,18 +22,15 @@ def save_feeds(feeds):
     os.replace(tmp, FEEDS_FILE)
 
 
+# Matrix moods deliberately use the same persistent store as the original
+# mood API.  This prevents 4x4 and 4x8 moods from becoming two unrelated
+# collections and gives the whole application one authoritative mood store.
 def load_matrix_moods():
-    if not os.path.exists(MATRIX_MOODS_FILE): return {}
-    try:
-        with open(MATRIX_MOODS_FILE, "r", encoding="utf-8") as f: data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError): return {}
+    return core.load_moods()
 
 
 def save_matrix_moods(moods):
-    tmp = MATRIX_MOODS_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f: json.dump(moods, f, indent=2)
-    os.replace(tmp, MATRIX_MOODS_FILE)
+    core.save_moods(moods)
 
 
 def read_local_sensor():
