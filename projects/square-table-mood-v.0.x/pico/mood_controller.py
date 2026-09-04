@@ -12,7 +12,7 @@ MAX_LEDS = 32
 LED_PIN = 0
 DHT_PIN = 15
 AUTO_TEMP_INTERVAL_MS = 10000
-AUTO_TEMP_BRIGHTNESS = 70
+AUTO_TEMP_BRIGHTNESS = 30
 
 # 16x2 LCD with the common PCF8574T I2C backpack.
 # The LCD remains independent of the LED mood/effect engine.
@@ -193,7 +193,7 @@ def read_pico_temperature():
     return 27-(voltage-0.706)/0.001721
 
 
-def show_temperature(temp, brightness=AUTO_TEMP_BRIGHTNESS, count=16): show_pixels([temperature_color(temp)]*count,brightness)
+def show_temperature(temp, brightness=AUTO_TEMP_BRIGHTNESS, count=MAX_LEDS): show_pixels([temperature_color(temp)]*count,brightness)
 
 
 def update_lcd(temp, humidity, error=None):
@@ -224,7 +224,7 @@ def update_sensor_state(update_led=False, force=False):
     else:
         update_lcd(None,None,error)
         if force and update_led:
-            show_pixels([(0,35,120)]*16,55)
+            show_pixels([(0,35,120)]*MAX_LEDS,55)
             print("AUTO_TEMP_ERROR",error)
 
 
@@ -351,75 +351,42 @@ def show_mood(mood):
         for i in range(16):
             clear(); np[i]=(0,0,25)
             if i>0: np[i-1]=(0,0,8)
+            if i>1: np[i-2]=(0,0,3)
             np.write(); time.sleep_ms(80)
-    elif mood=="OPTIMISTIC": breathing(0,25,5)
-    elif mood=="SKEPTICAL": breathing(25,10,0)
-    elif mood=="ERROR": fill((30,0,0)); time.sleep_ms(300); clear(); time.sleep_ms(300)
-    elif mood=="AGREEMENT": fill((0,25,10)); time.sleep_ms(1000)
-    elif mood=="DISAGREEMENT": fill((25,0,0)); time.sleep_ms(300); fill((0,0,25)); time.sleep_ms(300)
-    elif mood=="BUFFERING": breathing(25,8,0)
-    elif mood=="IDLE": breathing(0,5,15)
-    else: clear()
+    elif mood=="SAD": fill((0,0,20))
+    elif mood=="ANGRY": fill((35,0,0))
+    elif mood=="LOVE": fill((30,0,12))
+    elif mood=="CALM": breathing(0,0,25)
+    elif mood=="EXCITED": breathing(30,10,0)
+    elif mood=="RAINBOW":
+        colors=[(30,0,0),(30,15,0),(30,30,0),(0,30,0),(0,0,30),(10,0,30),(30,0,30)]
+        for shift in range(14):
+            for i in range(16): np[i]=colors[(i+shift)%len(colors)]
+            np.write(); time.sleep_ms(60)
+    else:
+        clear()
 
 
-def transition(target,kind="FADE",duration=1200,brightness=100):
-    show_pixels(target,brightness)
-    end=time.ticks_add(time.ticks_ms(),max(20,duration))
-    while time.ticks_diff(end,time.ticks_ms())>0:
-        time.sleep_ms(25); cmd=check_command()
-        if cmd: handle_command(cmd); return True
-    return False
+def handle_command(line):
+    global host_active
+    try:
+        payload=json.loads(line)
+        if payload.get("type")=="effect_stop": stop_live_effect(); host_active=False; return
+        if payload.get("type")=="effect": host_active=True; start_live_effect(payload); return
+        if payload.get("type")=="mood": host_active=True; run_custom_mood(payload); return
+        if payload.get("type")=="sensor": print(json.dumps(read_sensor())); return
+        if payload.get("type")=="stop": host_active=False; stop_live_effect(); return
+        if payload.get("type")=="temp":
+            host_active=True
+            show_temperature(float(payload.get("temperature",25)), int(payload.get("brightness",AUTO_TEMP_BRIGHTNESS)), int(payload.get("leds",MAX_LEDS)))
+            return
+        if payload.get("type")=="auto_temp":
+            host_active=False; automatic_temperature_update(force=True); return
+        print("ERROR: unknown command")
+    except Exception as e:
+        print("ERROR",e)
 
 
-def run_feed(payload):
-    frames=payload.get("frames")
-    if not isinstance(frames,list) or not frames: return
-    loop=bool(payload.get("loop",True))
-    while True:
-        for frame in frames:
-            if not isinstance(frame,dict): continue
-            pixels=normalize_pixels(frame.get("pixels"))
-            if pixels is None: continue
-            if transition(pixels,str(frame.get("transition","FADE")),int(frame.get("duration",1200)),int(frame.get("brightness",100))): return
-            hold=max(20,min(10000,int(frame.get("hold",500)))); end=time.ticks_add(time.ticks_ms(),hold)
-            while time.ticks_diff(end,time.ticks_ms())>0:
-                time.sleep_ms(25); cmd=check_command()
-                if cmd: handle_command(cmd); return
-        if not loop: return
-
-
-def handle_command(command):
-    global host_active,active_effect,rain_state,cloud_state
-    if not command: return
-    upper=command.upper()
-    if upper=="HOST_ON":
-        host_active=True
-        if last_temp is not None: show_temperature(last_temp)
-        else: automatic_temperature_update(force=True)
-        print("HOST_ON"); print("READY"); return
-    if upper=="HOST_OFF":
-        host_active=False; active_effect=None; rain_state=None; cloud_state=None
-        automatic_temperature_update(force=True)
-        print("HOST_OFF"); print("READY"); return
-    if upper=="SENSOR":
-        print(json.dumps(read_sensor(),separators=(",",":"))); print("READY"); return
-    if upper=="STOP_EFFECT":
-        stop_live_effect(); print("READY"); return
-    if command.startswith("{"):
-        try:
-            payload=json.loads(command); kind=payload.get("type")
-            if kind=="effect": start_live_effect(payload); return
-            if kind=="mood": active_effect=None; run_custom_mood(payload); print("READY"); return
-            if kind=="feed": active_effect=None; run_feed(payload); print("READY"); return
-            print("ERROR: unknown JSON command")
-        except Exception as e: print("ERROR:",e)
-        return
-    active_effect=None; show_mood(command); print("READY")
-
-
-# Give the DHT11 and LCD a moment after power-up.
-time.sleep_ms(1200)
-automatic_temperature_update(force=True)
 print("AI Mood Matrix online")
 print("Stand-alone DHT11 temperature mode ready")
 print("Pico internal temperature sensor available")
@@ -429,10 +396,12 @@ print("Live effects use non-blocking state engine")
 print("READY")
 
 while True:
-    # Keep the LCD/DHT11 alive independently of the web host and LED effects.
-    if time.ticks_diff(time.ticks_ms(),last_lcd_update_ms)>=LCD_UPDATE_INTERVAL_MS:
-        update_sensor_state(update_led=(not host_active and active_effect is None))
-    command=check_command()
-    if command: handle_command(command)
-    elif active_effect is not None: step_live_effect()
-    else: time.sleep_ms(30)
+    cmd=check_command()
+    if cmd:
+        handle_command(cmd)
+    elif time.ticks_diff(time.ticks_ms(),last_auto_temp_ms)>=AUTO_TEMP_INTERVAL_MS:
+        automatic_temperature_update()
+    if active_effect:
+        step_live_effect()
+    else:
+        time.sleep_ms(20)
