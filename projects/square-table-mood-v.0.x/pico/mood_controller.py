@@ -72,7 +72,10 @@ class I2CLcd:
         self._send(ord(value), 1)
 
     def puts(self, text, row=0):
-        text = str(text)[:16].ljust(16)
+        # Avoid str.ljust(); some MicroPython builds do not implement it.
+        text = str(text)[:16]
+        if len(text) < 16:
+            text += " " * (16 - len(text))
         self.command(0x80 if row == 0 else 0xC0)
         for char in text:
             self.putchar(char)
