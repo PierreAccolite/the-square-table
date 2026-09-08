@@ -1,9 +1,4 @@
-import os
-import time
-import threading
-import urllib.request
-from collections import deque
-
+import os, time, threading, urllib.request, math
 import cv2
 from flask import Flask, Response, jsonify, request, render_template_string
 
@@ -12,440 +7,232 @@ try:
     from mediapipe.tasks import python
     from mediapipe.tasks.python import vision
 except ImportError:
-    mp = None
-    python = None
-    vision = None
+    mp = python = vision = None
 
-HOST = "0.0.0.0"
-PORT = 8080
-CAMERA_SCAN_MAX = 10
-CAMERA_SCAN_CACHE_SECONDS = 5.0
+HOST, PORT = "0.0.0.0", 8080
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_FILE = os.path.join(BASE_DIR, "hand_landmarker.task")
-MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+HAND_MODEL = os.path.join(BASE_DIR, "hand_landmarker.task")
+FACE_MODEL = os.path.join(BASE_DIR, "face_landmarker.task")
+HAND_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+FACE_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
 
 app = Flask(__name__)
-
-state_lock = threading.Lock()
 camera_lock = threading.Lock()
 frame_lock = threading.Lock()
-
+state_lock = threading.Lock()
 camera = None
 camera_index = None
 latest_jpeg = None
 frame_sequence = 0
 running = True
-hand_landmarker = None
+hand_landmarker = face_landmarker = None
 last_timestamp_ms = 0
-camera_scan_cache = []
-camera_scan_time = 0.0
-
-hand_data = {
-    "detected": False,
-    "x": 0.5,
-    "y": 0.5,
-    "gesture": "None",
-    "finger_count": 0,
-    "confidence": 0.0,
-    "calibrated_x": 0.5,
-    "calibrated_y": 0.5,
-    "fps": 0.0,
-}
+scan_cache, scan_time = [], 0.0
+fps = 0.0
+fps_frames, fps_time = 0, time.monotonic()
 calibration = {"active": False, "x": 0.5, "y": 0.5}
 
-HTML = r"""
-<!doctype html>
-<html><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Camera + Hand Lab + Flyer</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#101318;color:#eee;font-family:Arial,sans-serif}.wrap{max-width:1200px;margin:auto;padding:18px}h1{margin:0 0 14px;font-size:26px}.tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}button,select,input{font:inherit}button{background:#252c36;color:#fff;border:1px solid #3b4655;border-radius:7px;padding:9px 13px;cursor:pointer}button:hover{background:#303947}button.active{background:#3b4f68}select{background:#181e26;color:#fff;border:1px solid #3b4655;border-radius:7px;padding:9px}.panel{display:none;background:#171c23;border:1px solid #2b333e;border-radius:10px;padding:14px}.panel.active{display:block}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.status{color:#9fb4c9}#video{display:block;width:100%;max-width:960px;background:#000;border-radius:8px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.card{background:#11161c;border:1px solid #2b333e;border-radius:8px;padding:12px}.big{font-size:24px;font-weight:bold;margin-top:4px}canvas{width:100%;max-width:900px;border-radius:8px;background:#8fd3ff;display:block}.small{font-size:13px;color:#9ba7b4}label{display:flex;gap:8px;align-items:center}input[type=range]{width:180px}
-</style></head><body><div class="wrap">
-<h1>Camera + Hand Lab + Flyer</h1>
-<div class="tabs"><button class="tab active" data-tab="cameraPanel">Camera</button><button class="tab" data-tab="handPanel">Hand Lab</button><button class="tab" data-tab="gamePanel">Flyer</button></div>
-<div id="cameraPanel" class="panel active"><div class="row"><select id="cameraSelect"></select><button id="refreshBtn">Refresh cameras</button><button id="connectBtn">Connect</button><button id="disconnectBtn">Disconnect</button><span id="cameraStatus" class="status">Ready.</span></div><img id="video" src="/video_feed" alt="Camera feed"><p class="small">The server listens on port 8080. Other machines on the LAN can use the server's IP address.</p></div>
-<div id="handPanel" class="panel"><div class="row"><button id="calibrateBtn">Calibrate neutral position</button><span id="calStatus" class="status">Move your hand into a comfortable neutral position, then calibrate.</span></div><div class="grid"><div class="card">Detected<div id="detected" class="big">No</div></div><div class="card">Gesture<div id="gesture" class="big">None</div></div><div class="card">Fingers<div id="fingers" class="big">0</div></div><div class="card">X<div id="x" class="big">0.50</div></div><div class="card">Y<div id="y" class="big">0.50</div></div><div class="card">Confidence<div id="confidence" class="big">0%</div></div><div class="card">Server FPS<div id="fps" class="big">0</div></div></div></div>
-<div id="gamePanel" class="panel"><div class="row"><button id="startGame">Start / Restart</button><label>Sensitivity <input id="sensitivity" type="range" min="50" max="200" value="100"><span id="sensValue">100%</span></label><span class="status">Open Palm / Thumbs Up = flap. Hand Y = altitude.</span></div><canvas id="game" width="900" height="600"></canvas><p class="small">Keyboard SPACE also works as a backup control during testing.</p></div>
-</div>
-<script>
-const $=id=>document.getElementById(id);
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active')});
+def blank_hand():
+    return {"detected": False, "label": "Unknown", "x": 0.5, "y": 0.5, "pinch": False, "pinch_distance": 0.0, "fingers": 0, "gesture": "None", "roll": 0.0, "landmarks": []}
 
-async function loadCameras(){try{const r=await fetch('/api/cameras',{cache:'no-store'});const d=await r.json();const s=$('cameraSelect');s.innerHTML='';d.cameras.forEach(c=>{const o=document.createElement('option');o.value=c.index;o.textContent=c.name;s.appendChild(o)});if(d.cameras.length){if(d.current!==null&&d.current!==undefined&&d.cameras.some(c=>c.index===d.current))s.value=d.current;else s.value=d.cameras[0].index} $('cameraStatus').textContent=d.current!==null&&d.current!==undefined?'Camera connected.':'Ready. Select a camera and press Connect.'}catch(e){console.error(e);$('cameraStatus').textContent='Could not scan cameras.'}}
-async function selectCamera(){const value=$('cameraSelect').value;if(value===''){ $('cameraStatus').textContent='Please select a camera.';return }$('cameraStatus').textContent='Connecting...';try{const r=await fetch('/select_camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({camera:value})});const d=await r.json();$('cameraStatus').textContent=d.ok?'Connected to camera '+value:d.error}catch(e){$('cameraStatus').textContent='Camera connection failed.'}}
-async function disconnectCamera(){ $('cameraStatus').textContent='Disconnecting...';try{const r=await fetch('/disconnect',{method:'POST'});const d=await r.json();$('cameraStatus').textContent=d.ok?'Disconnected.':d.error}catch(e){$('cameraStatus').textContent='Disconnect failed.'}}
-$('refreshBtn').onclick=loadCameras;$('connectBtn').onclick=selectCamera;$('disconnectBtn').onclick=disconnectCamera;
-$('calibrateBtn').onclick=async()=>{const r=await fetch('/calibrate',{method:'POST'});const d=await r.json();$('calStatus').textContent=d.ok?'Calibration captured.':'No hand detected - try again.'};
-async function pollHand(){try{const d=await(await fetch('/api/hand',{cache:'no-store'})).json();$('detected').textContent=d.detected?'Yes':'No';$('gesture').textContent=d.gesture;$('fingers').textContent=d.finger_count;$('x').textContent=d.calibrated_x.toFixed(2);$('y').textContent=d.calibrated_y.toFixed(2);$('confidence').textContent=Math.round(d.confidence*100)+'%';$('fps').textContent=d.fps.toFixed(1);game.handY=d.calibrated_y;game.gesture=d.gesture;game.detected=d.detected}catch(e){}}
-setInterval(pollHand,80);
+hand_data = {"detected": False, "hands_detected": 0, "x": 0.5, "y": 0.5, "gesture": "None", "finger_count": 0, "confidence": 0.0, "calibrated_x": 0.5, "calibrated_y": 0.5, "fps": 0.0, "left": None, "right": None, "face_detected": False, "blink_left": False, "blink_right": False, "blink": False, "wink": "None", "mouth_open": False, "smile": 0.0, "head_yaw": 0.0, "head_pitch": 0.0, "head_roll": 0.0, "head_direction": "Centre"}
 
-const canvas=$('game'),ctx=canvas.getContext('2d');
-const game={running:false,over:false,score:0,best:Number(localStorage.getItem('flyerBest')||0),x:180,y:300,vy:0,gravity:.38,flap:-7.2,pipes:[],speed:3.2,spawn:0,lastGesture:'None',handY:.5,gesture:'None',detected:false,sensitivity:1};
-function resetGame(){game.running=true;game.over=false;game.score=0;game.x=180;game.y=300;game.vy=0;game.pipes=[];game.spawn=0;game.lastGesture='None'}
-function flap(){if(game.over||!game.running){resetGame();return}game.vy=game.flap}
-$('startGame').onclick=resetGame;$('sensitivity').oninput=e=>{$('sensValue').textContent=e.target.value+'%';game.sensitivity=Number(e.target.value)/100};document.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();flap()}});
-function addPipe(){const gap=155,top=90+Math.random()*260;game.pipes.push({x:canvas.width+30,top:top,bottom:top+gap,passed:false})}
-function collide(p){const r=18;return game.x+r>p.x&&game.x-r<p.x+65&&(game.y-r<p.top||game.y+r>p.bottom)}
-function endGame(){game.over=true;game.running=false;if(game.score>game.best){game.best=game.score;localStorage.setItem('flyerBest',game.best)}}
-function update(){if(!game.running||game.over)return;const target=100+game.handY*400;if(game.detected)game.y=game.y+(target-game.y)*.18*game.sensitivity;else{game.vy+=game.gravity;game.y+=game.vy}game.spawn--;if(game.spawn<=0){addPipe();game.spawn=105}for(const p of game.pipes){p.x-=game.speed;if(!p.passed&&p.x+65<game.x){p.passed=true;game.score++}if(collide(p))endGame()}game.pipes=game.pipes.filter(p=>p.x>-90);if(game.y<18||game.y>canvas.height-18)endGame();if(game.detected&&(game.gesture==='Open Palm'||game.gesture==='Thumbs Up')&&game.lastGesture!=='Open Palm'&&game.lastGesture!=='Thumbs Up')flap();game.lastGesture=game.gesture}
-function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);const grd=ctx.createLinearGradient(0,0,0,canvas.height);grd.addColorStop(0,'#8fd3ff');grd.addColorStop(1,'#d9f3ff');ctx.fillStyle=grd;ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#7dbb55';ctx.fillRect(0,canvas.height-35,canvas.width,35);ctx.fillStyle='#4b8f3c';ctx.fillRect(0,canvas.height-35,canvas.width,5);ctx.fillStyle='#3e9b55';for(const p of game.pipes){ctx.fillRect(p.x,0,65,p.top);ctx.fillRect(p.x,p.bottom,65,canvas.height-p.bottom-35);ctx.fillRect(p.x-6,p.top-14,77,14);ctx.fillRect(p.x-6,p.bottom,77,14)}ctx.fillStyle='#f3c542';ctx.beginPath();ctx.arc(game.x,game.y,18,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(game.x+7,game.y-6,6,0,Math.PI*2);ctx.fill();ctx.fillStyle='#111';ctx.beginPath();ctx.arc(game.x+9,game.y-6,2.5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#e87922';ctx.beginPath();ctx.moveTo(game.x+17,game.y);ctx.lineTo(game.x+31,game.y+5);ctx.lineTo(game.x+17,game.y+9);ctx.fill();ctx.fillStyle='#10202b';ctx.font='bold 28px Arial';ctx.fillText('Score: '+game.score,20,40);ctx.font='18px Arial';ctx.fillText('Best: '+game.best,20,66);if(!game.running){ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold 42px Arial';ctx.fillText(game.over?'Game Over':'Flappy-style Flyer',canvas.width/2,250);ctx.font='22px Arial';ctx.fillText(game.over?'Press Start / Restart or SPACE':'Press Start / Restart',canvas.width/2,295);ctx.textAlign='left'}}
-function loop(){update();draw();requestAnimationFrame(loop)}
-loadCameras();pollHand();loop();
-</script></body></html>
-"""
-
-
-def download_model():
-    if os.path.exists(MODEL_FILE):
-        return True
-    print("MediaPipe hand model not found.")
-    print("Downloading hand_landmarker.task ...")
+def get_model(path, url, name):
+    if os.path.exists(path): return True
+    print(f"{name} missing; downloading...")
     try:
-        urllib.request.urlretrieve(MODEL_URL, MODEL_FILE)
-        print("Hand model downloaded.")
+        urllib.request.urlretrieve(url, path)
+        print(f"{name} ready.")
         return True
-    except Exception as exc:
-        print(f"Could not download hand model: {exc}")
+    except Exception as e:
+        print(f"{name} download failed: {e}")
         return False
 
-
-def init_hand_landmarker():
-    global hand_landmarker
-    if mp is None or python is None or vision is None:
+def init_trackers():
+    global hand_landmarker, face_landmarker
+    if not mp:
         print("MediaPipe is not installed.")
         return False
-    if not download_model():
-        return False
-    try:
-        base_options = python.BaseOptions(model_asset_path=MODEL_FILE)
-        options = vision.HandLandmarkerOptions(
-            base_options=base_options,
-            running_mode=vision.RunningMode.VIDEO,
-            num_hands=1,
-            min_hand_detection_confidence=0.5,
-            min_hand_presence_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
-        hand_landmarker = vision.HandLandmarker.create_from_options(options)
-        print("MediaPipe Hand Landmarker ready.")
-        return True
-    except Exception as exc:
-        print(f"MediaPipe initialization failed: {exc}")
-        hand_landmarker = None
-        return False
-
+    if get_model(HAND_MODEL, HAND_URL, "Hand model"):
+        try:
+            hand_landmarker = vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(base_options=python.BaseOptions(model_asset_path=HAND_MODEL), running_mode=vision.RunningMode.VIDEO, num_hands=2, min_hand_detection_confidence=0.5, min_hand_presence_confidence=0.5, min_tracking_confidence=0.5))
+            print("Hand Landmarker ready: 2 hands.")
+        except Exception as e: print(f"Hand tracker failed: {e}")
+    if get_model(FACE_MODEL, FACE_URL, "Face model"):
+        try:
+            face_landmarker = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(base_options=python.BaseOptions(model_asset_path=FACE_MODEL), running_mode=vision.RunningMode.VIDEO, num_faces=1, min_face_detection_confidence=0.5, min_face_presence_confidence=0.5, min_tracking_confidence=0.5, output_face_blendshapes=True))
+            print("Face Landmarker ready.")
+        except Exception as e: print(f"Face tracker failed: {e}")
+    return bool(hand_landmarker or face_landmarker)
 
 def open_camera(index):
-    global camera, camera_index, latest_jpeg, frame_sequence, camera_scan_time
-    try:
-        index = int(index)
-    except (TypeError, ValueError):
-        return False
-
+    global camera, camera_index, latest_jpeg, frame_sequence, scan_time
+    try: index = int(index)
+    except (TypeError, ValueError): return False
     with camera_lock:
-        if camera is not None and camera.isOpened() and camera_index == index:
-            print(f"Camera {index} is already connected; leaving it open.")
-            return True
-
+        if camera is not None and camera.isOpened() and camera_index == index: return True
         if camera is not None:
-            print(f"Releasing camera {camera_index}...")
-            try:
-                camera.release()
-            except Exception:
-                pass
-            camera = None
-            camera_index = None
-
-        print(f"Opening camera {index}...")
-        new_camera = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        if not new_camera.isOpened():
-            new_camera.release()
-            print(f"Could not open camera {index}.")
-            return False
-
-        new_camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        new_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        new_camera.set(cv2.CAP_PROP_FPS, 30)
-        camera = new_camera
+            try: camera.release()
+            except Exception: pass
+        camera = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        if not camera.isOpened():
+            camera.release(); camera = None; camera_index = None; return False
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280); camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720); camera.set(cv2.CAP_PROP_FPS, 30)
         camera_index = index
-
-        with frame_lock:
-            latest_jpeg = None
-            frame_sequence += 1
-
-        camera_scan_time = 0.0
+        with frame_lock: latest_jpeg = None; frame_sequence += 1
+        scan_time = 0.0
         print(f"Camera {index} connected.")
         return True
 
-
 def close_camera():
-    global camera, camera_index, latest_jpeg, frame_sequence, camera_scan_time
+    global camera, camera_index, latest_jpeg, frame_sequence, scan_time
     with camera_lock:
         if camera is not None:
-            print(f"Closing camera {camera_index}...")
-            try:
-                camera.release()
-            except Exception:
-                pass
-        camera = None
-        camera_index = None
-        with frame_lock:
-            latest_jpeg = None
-            frame_sequence += 1
-        camera_scan_time = 0.0
-
+            try: camera.release()
+            except Exception: pass
+        camera = camera_index = None
+        with frame_lock: latest_jpeg = None; frame_sequence += 1
+        scan_time = 0.0
 
 def scan_cameras(force=False):
-    global camera_scan_cache, camera_scan_time
+    global scan_cache, scan_time
     now = time.monotonic()
     with camera_lock:
         current = camera_index
-        if not force and now - camera_scan_time < CAMERA_SCAN_CACHE_SECONDS:
-            return list(camera_scan_cache), current
+        if not force and now - scan_time < 5: return list(scan_cache), current
+        found = [{"index": current, "name": f"Camera {current}"}] if current is not None else []
+        for i in range(10):
+            if i == current: continue
+            p = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            if p.isOpened(): found.append({"index": i, "name": f"Camera {i}"})
+            p.release()
+        found.sort(key=lambda x:x["index"]); scan_cache, scan_time = found, now
+        return list(found), current
 
-        cameras = []
-        for index in range(CAMERA_SCAN_MAX):
-            if current is not None and index == current:
-                cameras.append({"index": index, "name": f"Camera {index}"})
-                continue
-            test = None
-            try:
-                test = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-                if test.isOpened():
-                    cameras.append({"index": index, "name": f"Camera {index}"})
-            except Exception as exc:
-                print(f"Camera scan error {index}: {exc}")
-            finally:
-                if test is not None:
-                    try:
-                        test.release()
-                    except Exception:
-                        pass
+def dist(a,b): return math.sqrt((a.x-b.x)**2+(a.y-b.y)**2+(a.z-b.z)**2)
 
-        camera_scan_cache = cameras
-        camera_scan_time = now
-        return list(cameras), current
+def hand_info(lm, label):
+    s={"index":lm[8].y<lm[6].y,"middle":lm[12].y<lm[10].y,"ring":lm[16].y<lm[14].y,"pinky":lm[20].y<lm[18].y}
+    s["thumb"]=dist(lm[4],lm[9])>dist(lm[3],lm[9])*1.08
+    count=sum(s.values()); ratio=dist(lm[4],lm[8])/max(dist(lm[0],lm[9]),.001); pinch=ratio<.42
+    if pinch: gesture="Pinch"
+    elif count==0: gesture="Fist"
+    elif count==5: gesture="Open Palm"
+    elif s["index"] and not s["middle"] and not s["ring"] and not s["pinky"]: gesture="Point"
+    elif s["index"] and s["middle"] and not s["ring"] and not s["pinky"]: gesture="Peace"
+    elif s["thumb"] and count==1: gesture="Thumbs Up"
+    else: gesture=f"{count} Fingers"
+    return {"detected":True,"label":label,"x":sum(p.x for p in lm)/21,"y":sum(p.y for p in lm)/21,"pinch":pinch,"pinch_distance":round(ratio,3),"fingers":count,"gesture":gesture,"roll":round(math.degrees(math.atan2(lm[17].y-lm[5].y,lm[17].x-lm[5].x)),1),"landmarks":[{"x":round(p.x,4),"y":round(p.y,4)} for p in lm]}
 
-
-def clamp(v, lo=0.0, hi=1.0):
-    return max(lo, min(hi, v))
-
-
-def distance(a, b):
-    dx = a.x - b.x
-    dy = a.y - b.y
-    return (dx * dx + dy * dy) ** 0.5
-
-
-def classify_hand(landmarks):
-    wrist = landmarks[0]
-    thumb_tip, thumb_mcp = landmarks[4], landmarks[2]
-    index_tip, index_pip = landmarks[8], landmarks[6]
-    middle_tip, middle_pip = landmarks[12], landmarks[10]
-    ring_tip, ring_pip = landmarks[16], landmarks[14]
-    pinky_tip, pinky_pip = landmarks[20], landmarks[18]
-
-    fingers = 0
-    if distance(index_tip, wrist) > distance(index_pip, wrist) * 1.12: fingers += 1
-    if distance(middle_tip, wrist) > distance(middle_pip, wrist) * 1.12: fingers += 1
-    if distance(ring_tip, wrist) > distance(ring_pip, wrist) * 1.12: fingers += 1
-    if distance(pinky_tip, wrist) > distance(pinky_pip, wrist) * 1.12: fingers += 1
-
-    thumb_extended = distance(thumb_tip, wrist) > distance(thumb_mcp, wrist) * 1.12
-    if thumb_extended: fingers += 1
-
-    if thumb_extended and fingers == 1:
-        gesture = "Thumbs Up" if thumb_tip.y < thumb_mcp.y - 0.06 else "Thumb"
-    elif fingers == 5:
-        gesture = "Open Palm"
-    elif fingers == 0:
-        gesture = "Fist"
-    elif fingers == 2 and distance(index_tip, middle_tip) < distance(index_tip, wrist) * 0.45:
-        gesture = "Peace"
-    elif fingers == 1:
-        gesture = "Point"
-    else:
-        gesture = f"{fingers} Fingers"
-    return gesture, fingers
-
-
-def process_frame(frame):
-    global last_timestamp_ms
-    if hand_landmarker is None:
-        return frame
-
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-    timestamp_ms = int(time.monotonic() * 1000)
-    if timestamp_ms <= last_timestamp_ms:
-        timestamp_ms = last_timestamp_ms + 1
-    last_timestamp_ms = timestamp_ms
-
+def pose(face,w,h):
+    import numpy as np
+    ids=[1,33,263,61,291,152]; img=np.array([[face[i].x*w,face[i].y*h] for i in ids],dtype="double")
+    model=np.array([[0,0,0],[-45,-32,35],[45,-32,35],[-35,35,20],[35,35,20],[0,65,5]],dtype="double"); f=float(w); cam=np.array([[f,0,w/2],[0,f,h/2],[0,0,1]],dtype="double")
     try:
-        result = hand_landmarker.detect_for_video(image, timestamp_ms)
-    except Exception as exc:
-        print(f"Hand detection error: {exc}")
-        return frame
+        ok,rv,_=cv2.solvePnP(model,img,cam,np.zeros((4,1)),flags=cv2.SOLVEPNP_ITERATIVE)
+        if not ok:return 0,0,0
+        r,_=cv2.Rodrigues(rv); sy=math.sqrt(r[0,0]**2+r[1,0]**2)
+        return math.degrees(math.atan2(r[1,0],r[0,0])), math.degrees(math.atan2(-r[2,0],sy)), math.degrees(math.atan2(r[2,1],r[2,2]))
+    except Exception:return 0,0,0
 
-    if not result.hand_landmarks:
-        with state_lock:
-            hand_data.update({"detected": False, "gesture": "None", "finger_count": 0, "confidence": 0.0})
-        return frame
+def blend(cats,name):
+    for c in cats:
+        if c.category_name==name:return float(c.score)
+    return 0.0
 
-    landmarks = result.hand_landmarks[0]
-    index_tip = landmarks[8]
-    x, y = clamp(index_tip.x), clamp(index_tip.y)
-    gesture, fingers = classify_hand(landmarks)
-    try:
-        confidence = float(result.handedness[0][0].score)
-    except Exception:
-        confidence = 1.0
-
+def process(frame):
+    global hand_data,last_timestamp_ms
+    rgb=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB); image=mp.Image(image_format=mp.ImageFormat.SRGB,data=rgb); ts=max(int(time.monotonic()*1000),last_timestamp_ms+1); last_timestamp_ms=ts
+    hr=hand_landmarker.detect_for_video(image,ts) if hand_landmarker else None; fr=face_landmarker.detect_for_video(image,ts) if face_landmarker else None; hands=[]
+    if hr and hr.hand_landmarks:
+        for i,lm in enumerate(hr.hand_landmarks[:2]):
+            label=hr.handedness[i][0].category_name if hr.handedness else "Unknown"; hands.append(hand_info(lm,label))
+            for p in lm: cv2.circle(frame,(int(p.x*frame.shape[1]),int(p.y*frame.shape[0])),3,(0,220,80),-1)
+    left=next((x for x in hands if x["label"]=="Left"),None); right=next((x for x in hands if x["label"]=="Right"),None); primary=right or left or (hands[0] if hands else None)
+    fs={"face_detected":False,"blink_left":False,"blink_right":False,"blink":False,"wink":"None","mouth_open":False,"smile":0.0,"head_yaw":0.0,"head_pitch":0.0,"head_roll":0.0,"head_direction":"Centre"}
+    if fr and fr.face_landmarks:
+        face=fr.face_landmarks[0]; fs["face_detected"]=True; yaw,pitch,roll=pose(face,frame.shape[1],frame.shape[0]); fs.update(head_yaw=round(yaw,1),head_pitch=round(pitch,1),head_roll=round(roll,1))
+        if yaw < -12: fs["head_direction"]="Left"
+        elif yaw > 12: fs["head_direction"]="Right"
+        elif pitch < -10: fs["head_direction"]="Up"
+        elif pitch > 10: fs["head_direction"]="Down"
+        def ear(ids):
+            p=[face[i] for i in ids]; return (dist(p[1],p[5])+dist(p[2],p[4]))/(2*max(dist(p[0],p[3]),.0001))
+        le,re=ear([33,160,158,133,153,144]),ear([362,385,387,263,373,380]); fs["blink_left"]=le<.18; fs["blink_right"]=re<.18; fs["blink"]=fs["blink_left"] and fs["blink_right"]
+        if fs["blink_left"]!=fs["blink_right"]: fs["wink"]="Left" if fs["blink_left"] else "Right"
+        if fr.face_blendshapes:
+            cats=fr.face_blendshapes[0]; fs["mouth_open"]=blend(cats,"jawOpen")>.35; fs["smile"]=round(max(blend(cats,"mouthSmileLeft"),blend(cats,"mouthSmileRight")),3)
+        for i in [1,33,263,61,291,152]:
+            p=face[i]; cv2.circle(frame,(int(p.x*frame.shape[1]),int(p.y*frame.shape[0])),3,(255,180,0),-1)
     with state_lock:
-        cal_x, cal_y = calibration["x"], calibration["y"]
-
-    calibrated_x = clamp(0.5 + (x - cal_x) * 1.8)
-    calibrated_y = clamp(0.5 + (y - cal_y) * 1.8)
-
-    with state_lock:
-        hand_data.update({"detected": True, "x": x, "y": y, "gesture": gesture, "finger_count": fingers, "confidence": confidence, "calibrated_x": calibrated_x, "calibrated_y": calibrated_y})
-
-    h, w = frame.shape[:2]
-    for lm in landmarks:
-        cv2.circle(frame, (int(clamp(lm.x) * w), int(clamp(lm.y) * h)), 4, (0, 255, 0), -1)
-    cv2.circle(frame, (int(x * w), int(y * h)), 10, (0, 200, 255), 2)
-    cv2.putText(frame, f"{gesture}  {confidence:.0%}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
+        d=dict(hand_data); d.update(fs); d["hands_detected"]=len(hands); d["detected"]=bool(hands); d["left"],d["right"]=left,right
+        if primary:
+            d.update(x=primary["x"],y=primary["y"],gesture=primary["gesture"],finger_count=primary["fingers"],confidence=1.0)
+            d["calibrated_x"]=max(0,min(1,primary["x"]-calibration["x"]+.5)) if calibration["active"] else primary["x"]; d["calibrated_y"]=max(0,min(1,primary["y"]-calibration["y"]+.5)) if calibration["active"] else primary["y"]
+        else: d.update(gesture="None",finger_count=0,confidence=0.0)
+        d["fps"]=fps; hand_data=d
     return frame
 
-
-def camera_worker():
-    global latest_jpeg, frame_sequence
-    fps_times = deque(maxlen=30)
-
+def worker():
+    global latest_jpeg,frame_sequence,fps,fps_frames,fps_time
     while running:
-        frame = None
         with camera_lock:
-            cam = camera
-            if cam is not None:
-                try:
-                    ok, frame = cam.read()
-                except Exception as exc:
-                    print(f"Camera read error: {exc}")
-                    ok, frame = False, None
-                if not ok:
-                    frame = None
-                if frame is not None:
-                    frame = cv2.flip(frame, 1)
-                    frame = process_frame(frame)
-                    now = time.monotonic()
-                    fps_times.append(now)
-                    if len(fps_times) >= 2:
-                        elapsed = fps_times[-1] - fps_times[0]
-                        fps = (len(fps_times) - 1) / elapsed if elapsed > 0 else 0.0
-                        with state_lock:
-                            hand_data["fps"] = fps
-                    ok, encoded = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
-                    if ok:
-                        with frame_lock:
-                            latest_jpeg = encoded.tobytes()
-                            frame_sequence += 1
+            cam=camera
+            if cam is None or not cam.isOpened(): frame=enc=None
+            else:
+                ok,frame=cam.read()
+                if ok:
+                    frame=cv2.flip(frame,1); frame=process(frame); ok,enc=cv2.imencode(".jpg",frame,[int(cv2.IMWRITE_JPEG_QUALITY),82])
+                else: enc=None
+        if frame is not None and enc is not None and ok:
+            with frame_lock: latest_jpeg=enc.tobytes(); frame_sequence+=1
+            fps_frames+=1; now=time.monotonic()
+            if now-fps_time>=1: fps=fps_frames/(now-fps_time); fps_frames=0; fps_time=now
+        else: time.sleep(.05)
 
-        time.sleep(0.001 if frame is not None else 0.05)
-
-
-def mjpeg_generator():
-    last_sent = -1
+def stream():
+    last=-1
     while running:
-        with frame_lock:
-            data = latest_jpeg
-            sequence = frame_sequence
-        if data is None:
-            time.sleep(0.05)
-            continue
-        if sequence == last_sent:
-            time.sleep(0.005)
-            continue
-        last_sent = sequence
-        yield (b'--frame\r\nContent-Type: image/jpeg\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\n\r\n' + data + b'\r\n')
+        with frame_lock: seq,jpeg=frame_sequence,latest_jpeg
+        if jpeg is not None and seq!=last:
+            last=seq; yield b"--frame\r\nContent-Type: image/jpeg\r\nCache-Control: no-cache\r\n\r\n"+jpeg+b"\r\n"
+        else: time.sleep(.01)
 
-
-@app.route('/')
-def index():
-    return render_template_string(HTML)
-
-
-@app.route('/api/cameras')
-def api_cameras():
-    cameras, current = scan_cameras()
-    return jsonify({"cameras": cameras, "current": current})
-
-
-@app.post('/select_camera')
-def select_camera():
-    data = request.get_json(silent=True) or {}
-    try:
-        index = int(data['camera'])
-    except (KeyError, TypeError, ValueError):
-        return jsonify({"ok": False, "error": "Invalid camera index."}), 400
-    if not open_camera(index):
-        return jsonify({"ok": False, "error": f"Could not open camera {index}."}), 400
-    return jsonify({"ok": True, "camera": index})
-
-
-@app.post('/disconnect')
-def disconnect():
-    close_camera()
-    with state_lock:
-        hand_data.update({"detected": False, "gesture": "None", "finger_count": 0, "confidence": 0.0, "fps": 0.0})
-    return jsonify({"ok": True})
-
-
-@app.get('/api/hand')
+@app.route("/")
+def index(): return render_template_string(HTML)
+@app.route("/api/cameras")
+def cameras(): c,i=scan_cameras(); return jsonify(cameras=c,current=i)
+@app.route("/select_camera",methods=["POST"])
+def select():
+    i=(request.get_json(silent=True) or {}).get("camera")
+    if i is None:return jsonify(ok=False,error="No camera selected."),400
+    ok=open_camera(i); return (jsonify(ok=True,camera=int(i)) if ok else jsonify(ok=False,error=f"Could not open camera {i}.")),200 if ok else 500
+@app.route("/disconnect",methods=["POST"])
+def disconnect(): close_camera(); return jsonify(ok=True)
+@app.route("/api/hand")
 def api_hand():
-    with state_lock:
-        return jsonify(dict(hand_data))
-
-
-@app.post('/calibrate')
+    with state_lock:return jsonify(dict(hand_data))
+@app.route("/calibrate",methods=["POST"])
 def calibrate():
     with state_lock:
-        if not hand_data['detected']:
-            return jsonify({"ok": False, "error": "No hand detected."}), 400
-        calibration['x'] = hand_data['x']
-        calibration['y'] = hand_data['y']
-        calibration['active'] = True
-    return jsonify({"ok": True})
+        p=hand_data.get("right") or hand_data.get("left")
+        if not p:return jsonify(ok=False)
+        calibration.update(active=True,x=p["x"],y=p["y"]); hand_data["calibrated_x"]=hand_data["calibrated_y"]=.5
+    return jsonify(ok=True)
+@app.route("/video_feed")
+def video_feed():return Response(stream(),mimetype="multipart/x-mixed-replace; boundary=frame",headers={"Cache-Control":"no-cache,no-store,must-revalidate","Pragma":"no-cache"})
 
+HTML = r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Square Table Human Tracker</title><style>*{box-sizing:border-box}body{margin:0;background:#101318;color:#eee;font-family:Arial,sans-serif}.wrap{max-width:1280px;margin:auto;padding:18px}h1{margin:0 0 14px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}button,select,input{font:inherit}button{background:#252c36;color:#fff;border:1px solid #3b4655;border-radius:7px;padding:9px 13px;cursor:pointer}button.active{background:#3b4f68}select{background:#181e26;color:#fff;border:1px solid #3b4655;border-radius:7px;padding:9px}.panel{display:none;background:#171c23;border:1px solid #2b333e;border-radius:10px;padding:14px}.panel.active{display:block}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.status{color:#9fb4c9}#video{display:block;width:100%;max-width:1100px;background:#000;border-radius:8px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px}.card,.hand{background:#11161c;border:1px solid #2b333e;border-radius:8px;padding:12px}.big{font-size:22px;font-weight:bold;margin-top:4px}.mono{font-family:Consolas,monospace;font-size:14px;line-height:1.5}.small{font-size:13px;color:#9ba7b4}label{display:flex;gap:8px;align-items:center}input[type=range]{width:180px}canvas{width:100%;max-width:900px;border-radius:8px;display:block}</style></head><body><div class="wrap"><h1>Square Table — Camera + Human Tracker</h1><div class="tabs"><button class="tab active" data-tab="cam">Camera</button><button class="tab" data-tab="lab">Human Lab</button><button class="tab" data-tab="fly">Flyer</button></div><div id="cam" class="panel active"><div class="row"><select id="cams"></select><button id="refresh">Refresh cameras</button><button id="connect">Connect</button><button id="disconnect">Disconnect</button><span id="status" class="status">Ready.</span></div><img id="video" src="/video_feed" alt="Camera feed"><p class="small">Two-hand + face tracking runs server-side. Refresh never probes the active camera.</p></div><div id="lab" class="panel"><div class="row"><button id="cal">Calibrate neutral hand position</button><span id="calstatus" class="status">Centre the primary hand before calibrating.</span></div><div class="grid"><div class="card">Hands<div id="hands" class="big">0</div></div><div class="card">Primary gesture<div id="gesture" class="big">None</div></div><div class="card">Fingers<div id="fingers" class="big">0</div></div><div class="card">X<div id="x" class="big">0.50</div></div><div class="card">Y<div id="y" class="big">0.50</div></div><div class="card">FPS<div id="fps" class="big">0</div></div></div><div class="hand"><b>Left hand</b><div id="left" class="mono">Not detected</div></div><br><div class="hand"><b>Right hand</b><div id="right" class="mono">Not detected</div></div><br><div class="hand"><b>Head / Face</b><div class="grid"><div class="card">Face<div id="face" class="big">No</div></div><div class="card">Blink<div id="blink" class="big">No</div></div><div class="card">Wink<div id="wink" class="big">None</div></div><div class="card">Direction<div id="dir" class="big">Centre</div></div><div class="card">Yaw<div id="yaw" class="big">0°</div></div><div class="card">Pitch<div id="pitch" class="big">0°</div></div><div class="card">Roll<div id="roll" class="big">0°</div></div><div class="card">Mouth<div id="mouth" class="big">Closed</div></div><div class="card">Smile<div id="smile" class="big">0%</div></div></div></div></div><div id="fly" class="panel"><div class="row"><button id="start">Start / Restart</button><label>Sensitivity <input id="sens" type="range" min="50" max="200" value="100"><span id="sensv">100%</span></label><span class="status">Primary hand Y = altitude; Open Palm / Thumbs Up = flap.</span></div><canvas id="game" width="900" height="600"></canvas><p class="small">SPACE is also available.</p></div></div><script>const $=id=>document.getElementById(id);document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active')});function ht(h){return h?`Gesture: ${h.gesture} | Fingers: ${h.fingers} | Pinch: ${h.pinch?'YES':'No'} | Ratio: ${h.pinch_distance.toFixed(3)} | X: ${h.x.toFixed(2)} Y: ${h.y.toFixed(2)} Roll: ${h.roll.toFixed(1)}°`:'Not detected'}async function cams(){try{let d=await(await fetch('/api/cameras',{cache:'no-store'})).json(),s=$('cams');s.innerHTML='';d.cameras.forEach(c=>{let o=document.createElement('option');o.value=c.index;o.textContent=c.name;s.appendChild(o)});if(d.cameras.length)s.value=d.current??d.cameras[0].index;$('status').textContent=d.current!=null?'Camera connected.':'Ready.'}catch(e){$('status').textContent='Could not scan cameras.'}}$('refresh').onclick=cams;$('connect').onclick=async()=>{let v=$('cams').value;if(v==='')return;$('status').textContent='Connecting...';let d=await(await fetch('/select_camera',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({camera:v})})).json();$('status').textContent=d.ok?'Connected to camera '+v:d.error};$('disconnect').onclick=async()=>{await fetch('/disconnect',{method:'POST'});$('status').textContent='Disconnected.'};$('cal').onclick=async()=>{$('calstatus').textContent=(await(await fetch('/calibrate',{method:'POST'})).json()).ok?'Calibration captured.':'No hand detected.'};function poll(){fetch('/api/hand',{cache:'no-store'}).then(r=>r.json()).then(d=>{$('hands').textContent=d.hands_detected;$('gesture').textContent=d.gesture;$('fingers').textContent=d.finger_count;$('x').textContent=d.calibrated_x.toFixed(2);$('y').textContent=d.calibrated_y.toFixed(2);$('fps').textContent=d.fps.toFixed(1);$('left').textContent=ht(d.left);$('right').textContent=ht(d.right);$('face').textContent=d.face_detected?'Yes':'No';$('blink').textContent=d.blink?'YES':'No';$('wink').textContent=d.wink;$('dir').textContent=d.head_direction;$('yaw').textContent=d.head_yaw.toFixed(1)+'°';$('pitch').textContent=d.head_pitch.toFixed(1)+'°';$('roll').textContent=d.head_roll.toFixed(1)+'°';$('mouth').textContent=d.mouth_open?'Open':'Closed';$('smile').textContent=Math.round(d.smile*100)+'%';g.yh=d.calibrated_y;g.g=d.gesture;g.detected=d.detected}).catch(()=>{})}setInterval(poll,80);const c=$('game'),ctx=c.getContext('2d'),g={run:false,over:false,x:180,y:300,vy:0,yh:.5,g:'None',detected:false,score:0,best:Number(localStorage.getItem('flyerBest')||0),pipes:[],spawn:0,sens:1,last:'None'};function reset(){g.run=true;g.over=false;g.score=0;g.x=180;g.y=300;g.vy=0;g.pipes=[];g.spawn=0;g.last='None'}function flap(){if(g.over||!g.run){reset();return}g.vy=-7.2}$('start').onclick=reset;$('sens').oninput=e=>{$('sensv').textContent=e.target.value+'%';g.sens=Number(e.target.value)/100};document.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();flap()}});function upd(){if(!g.run)return;let target=100+g.yh*400;if(g.detected)g.y+=(target-g.y)*.18*g.sens;else{g.vy+=.38;g.y+=g.vy}if(--g.spawn<=0){let t=90+Math.random()*260;g.pipes.push({x:c.width+30,t,b:t+155,p:false});g.spawn=105}for(let p of g.pipes){p.x-=3.2;if(!p.p&&p.x+65<g.x){p.p=true;g.score++}if(g.x+18>p.x&&g.x-18<p.x+65&&(g.y-18<p.t||g.y+18>p.b))g.over=g.run=false}g.pipes=g.pipes.filter(p=>p.x>-90);if(g.y<18||g.y>582)g.over=g.run=false;if(g.detected&&(g.g==='Open Palm'||g.g==='Thumbs Up')&&g.last!=='Open Palm'&&g.last!=='Thumbs Up')flap();g.last=g.g}function draw(){ctx.clearRect(0,0,c.width,c.height);let q=ctx.createLinearGradient(0,0,0,c.height);q.addColorStop(0,'#8fd3ff');q.addColorStop(1,'#d9f3ff');ctx.fillStyle=q;ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#7dbb55';ctx.fillRect(0,565,900,35);for(let p of g.pipes){ctx.fillRect(p.x,0,65,p.t);ctx.fillRect(p.x,p.b,65,565-p.b)}ctx.fillStyle='#f3c542';ctx.beginPath();ctx.arc(g.x,g.y,18,0,7);ctx.fill();ctx.fillStyle='#10202b';ctx.font='bold 28px Arial';ctx.fillText('Score: '+g.score,20,40);if(!g.run){ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(0,0,900,600);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold 42px Arial';ctx.fillText(g.over?'Game Over':'Flappy-style Flyer',450,260);ctx.font='22px Arial';ctx.fillText(g.over?'Press Start / Restart or SPACE':'Press Start / Restart',450,305);ctx.textAlign='left'}}function loop(){upd();draw();requestAnimationFrame(loop)}cams();poll();loop();</script></body></html>'''
 
-@app.get('/video_feed')
-def video_feed():
-    return Response(mjpeg_generator(), mimetype='multipart/x-mixed-replace; boundary=frame', headers={'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0'})
-
-
-def main():
-    print('=' * 60)
-    print('Camera + Hand Lab + Flyer')
-    print('=' * 60)
-    if mp is None:
-        print('ERROR: MediaPipe is not installed.')
-        print('Run: py -m pip install mediapipe')
-        return
-    if not init_hand_landmarker():
-        print('WARNING: Hand tracking is unavailable.')
-        print('The camera server will still start.')
-
-    # Deliberately do NOT open Camera 0 here.
-    # The web interface owns camera connection/disconnection.
-    print('Camera is waiting for web interface connection.')
-    threading.Thread(target=camera_worker, daemon=True).start()
-    print(f'Open locally: http://127.0.0.1:{PORT}')
-    print(f'LAN access:   http://<THIS-PC-IP>:{PORT}')
-    print('Press Ctrl+C to stop.')
+if __name__ == "__main__":
+    print("="*60)
+    print("Square Table Camera + Human Tracker")
+    print("="*60)
+    print("Camera waits for web interface connection.")
+    init_trackers()
+    threading.Thread(target=worker,daemon=True).start()
     try:
-        app.run(host=HOST, port=PORT, threaded=True, debug=False, use_reloader=False)
+        app.run(host=HOST,port=PORT,threaded=True,debug=False,use_reloader=False)
     finally:
+        running=False
         close_camera()
-
-
-if __name__ == '__main__':
-    main()
