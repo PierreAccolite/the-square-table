@@ -43,13 +43,15 @@ if errorlevel 1 (
 )
 
 echo.
-echo Checking FFmpeg...
-where ffmpeg >nul 2>&1
-if errorlevel 1 (
-    echo WARNING: FFmpeg was not found in PATH.
-    echo Timelapse MP4 generation will require FFmpeg.
+echo Checking portable FFmpeg...
+
+if exist "tools\ffmpeg\ffmpeg.exe" (
+    echo Portable FFmpeg found.
+    tools\ffmpeg\ffmpeg.exe -version | findstr /i "ffmpeg version"
 ) else (
-    echo FFmpeg found.
+    echo WARNING: tools\ffmpeg\ffmpeg.exe was not found.
+    echo Video recording can still be attempted using OpenCV.
+    echo Timelapse MP4 stitching will remain unavailable until FFmpeg is added.
 )
 
 echo.
