@@ -42,26 +42,57 @@ def ffmpeg_available():
     return LOCAL_FFMPEG.exists()
 
 
-def probe_cameras(max_index=10):
-    found = []
+def open_camera_index(index):
+    # DirectShow is normally the best choice on Windows, but some USB
+    # webcams expose themselves through Media Foundation instead.
+    backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
 
-    for index in range(max_index):
-        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+    for backend in backends:
+        cap = cv2.VideoCapture(index, backend)
 
         if not cap.isOpened():
             cap.release()
             continue
 
-        ok, frame = cap.read()
+        # Give USB cameras a moment to initialise before the first read.
+        for _ in range(3):
+            ok, frame = cap.read()
+
+            if ok and frame is not None:
+                return cap, frame
+
+            time.sleep(0.15)
+
         cap.release()
 
-        if ok and frame is not None:
-            height, width = frame.shape[:2]
-            found.append({
-                "index": index,
-                "name": f"Camera {index}",
-                "resolution": f"{width}x{height}",
-            })
+    return None, None
+
+
+def probe_cameras(max_index=10):
+    found = []
+
+    # Do not probe the active camera while the live stream/recorder owns it.
+    if camera is not None and camera.isOpened():
+        return [{
+            "index": selected_camera,
+            "name": f"Camera {selected_camera}",
+            "resolution": "Active",
+        }]
+
+    for index in range(max_index):
+        cap, frame = open_camera_index(index)
+
+        if cap is None or frame is None:
+            continue
+
+        height, width = frame.shape[:2]
+        cap.release()
+
+        found.append({
+            "index": index,
+            "name": f"Camera {index}",
+            "resolution": f"{width}x{height}",
+        })
 
     return found
 
@@ -71,7 +102,11 @@ def get_camera():
 
     with camera_lock:
         if camera is None or not camera.isOpened():
-            camera = cv2.VideoCapture(selected_camera, cv2.CAP_DSHOW)
+            camera, _ = open_camera_index(selected_camera)
+
+            if camera is None:
+                return None
+
             camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
             camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -90,6 +125,9 @@ def release_camera():
 
 def read_frame():
     cap = get_camera()
+
+    if cap is None:
+        return None
 
     with camera_lock:
         ok, frame = cap.read()
