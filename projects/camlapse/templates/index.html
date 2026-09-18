@@ -123,26 +123,34 @@
                 if (data.timelapse_running) {
                     $("timelapseStatus").textContent =
                         "Running — frames captured: " + data.timelapse_frames;
+                } else if (data.timelapse_finalizing) {
+                    $("timelapseStatus").textContent =
+                        "Captured " + data.timelapse_frames +
+                        " frames — creating MP4...";
                 } else if (data.timelapse_filename) {
                     $("timelapseStatus").textContent =
                         "Finished: " + data.timelapse_filename;
+                } else if (data.timelapse_error) {
+                    $("timelapseStatus").textContent =
+                        "Error: " + data.timelapse_error;
                 }
 
                 $("videoStartBtn").disabled =
-                    data.video_recording || data.timelapse_running;
+                    data.video_recording ||
+                    data.timelapse_running ||
+                    data.timelapse_finalizing;
                 $("videoStopBtn").disabled = !data.video_recording;
 
                 $("timelapseStartBtn").disabled =
-                    data.video_recording || data.timelapse_running;
+                    data.video_recording ||
+                    data.timelapse_running ||
+                    data.timelapse_finalizing;
                 $("timelapseStopBtn").disabled = !data.timelapse_running;
 
                 $("photoBtn").disabled =
-                    data.video_recording || data.timelapse_running;
-
-                if (!data.ffmpeg_available && data.timelapse_running === false) {
-                    $("timelapseStatus").title =
-                        "Portable FFmpeg is not installed. Frames will still be captured, but MP4 stitching will be skipped.";
-                }
+                    data.video_recording ||
+                    data.timelapse_running ||
+                    data.timelapse_finalizing;
             } catch (error) {
                 // Server may be starting or stopping.
             }
