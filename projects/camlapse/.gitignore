@@ -9,3 +9,5 @@ media/timelapses/*
 !media/photos/.gitkeep
 !media/videos/.gitkeep
 !media/timelapses/.gitkeep
+
+tools/ffmpeg/ffmpeg.exe
