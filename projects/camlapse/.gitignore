@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+media/photos/*
+media/videos/*
+media/timelapses/*
+!media/photos/.gitkeep
+!media/videos/.gitkeep
+!media/timelapses/.gitkeep
