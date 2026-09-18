@@ -22,7 +22,7 @@
         </section>
 
         <section class="preview panel">
-            <img id="preview" src="/video_feed" alt="Live camera preview">
+            <img id="preview" alt="Live camera preview">
         </section>
 
         <section class="controls">
@@ -101,6 +101,8 @@
                     option.textContent = "No cameras detected";
                     option.disabled = true;
                     select.appendChild(option);
+                } else {
+                    $("preview").src = "/video_feed?t=" + Date.now();
                 }
             } catch (error) {
                 $("cameraSelect").innerHTML =
