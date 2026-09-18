@@ -75,6 +75,7 @@ label {
 }
 
 select,
+input,
 button {
     min-height: 42px;
     border-radius: 7px;
@@ -83,7 +84,8 @@ button {
     font-size: 15px;
 }
 
-select {
+select,
+input {
     width: 100%;
     background: #081a1d;
     color: #e8f1f2;
@@ -120,7 +122,8 @@ button.danger {
     align-items: center;
 }
 
-.row select {
+.row select,
+.row input {
     margin-bottom: 0;
     flex: 1;
 }
@@ -129,4 +132,5 @@ button.danger {
     min-height: 20px;
     color: #9fb5b8;
     font-size: 14px;
+    line-height: 1.4;
 }
