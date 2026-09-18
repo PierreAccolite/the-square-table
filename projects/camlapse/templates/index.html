@@ -34,13 +34,14 @@
 
             <div class="panel">
                 <h2>Video</h2>
-                <button id="videoStartBtn">Start Recording</button>
+                <button class="primary" id="videoStartBtn">Start Recording</button>
                 <button class="danger" id="videoStopBtn" disabled>Stop Recording</button>
-                <p id="videoStatus" class="status">Video recording coming next.</p>
+                <p id="videoStatus" class="status">Ready.</p>
             </div>
 
             <div class="panel">
                 <h2>Timelapse</h2>
+
                 <label for="interval">Interval</label>
                 <select id="interval">
                     <option value="10">10 seconds</option>
@@ -62,8 +63,11 @@
                     <option value="86400">24 hours</option>
                 </select>
 
+                <label for="startAt">Scheduled start (optional)</label>
+                <input id="startAt" type="datetime-local">
+
                 <div class="row">
-                    <button id="timelapseStartBtn">Start Timelapse</button>
+                    <button class="primary" id="timelapseStartBtn">Start Timelapse</button>
                     <button class="danger" id="timelapseStopBtn" disabled>Stop</button>
                 </div>
 
@@ -73,51 +77,177 @@
     </main>
 
     <script>
+        const $ = id => document.getElementById(id);
+
         async function loadCameras() {
-            const response = await fetch("/api/cameras");
-            const data = await response.json();
-            const select = document.getElementById("cameraSelect");
+            try {
+                const response = await fetch("/api/cameras");
+                const data = await response.json();
+                const select = $("cameraSelect");
 
-            select.innerHTML = "";
+                select.innerHTML = "";
 
-            data.cameras.forEach(camera => {
-                const option = document.createElement("option");
-                option.value = camera.index;
-                option.textContent =
-                    camera.name + " (" + camera.resolution + ")";
-                option.selected = camera.index === data.selected;
-                select.appendChild(option);
-            });
+                data.cameras.forEach(camera => {
+                    const option = document.createElement("option");
+                    option.value = camera.index;
+                    option.textContent =
+                        camera.name + " (" + camera.resolution + ")";
+                    option.selected = camera.index === data.selected;
+                    select.appendChild(option);
+                });
 
-            if (!data.cameras.length) {
-                const option = document.createElement("option");
-                option.textContent = "No cameras detected";
-                option.disabled = true;
-                select.appendChild(option);
+                if (!data.cameras.length) {
+                    const option = document.createElement("option");
+                    option.textContent = "No cameras detected";
+                    option.disabled = true;
+                    select.appendChild(option);
+                }
+            } catch (error) {
+                $("cameraSelect").innerHTML =
+                    "<option>Camera scan failed</option>";
             }
         }
 
-        document.getElementById("refreshBtn").addEventListener("click", loadCameras);
+        async function refreshStatus() {
+            try {
+                const response = await fetch("/api/status");
+                const data = await response.json();
 
-        document.getElementById("cameraSelect").addEventListener("change", async event => {
-            await fetch("/api/camera/" + event.target.value, { method: "POST" });
-            document.getElementById("preview").src =
-                "/video_feed?t=" + Date.now();
-        });
+                if (data.video_recording) {
+                    $("videoStatus").textContent =
+                        "Recording: " + data.video_filename;
+                }
 
-        document.getElementById("photoBtn").addEventListener("click", async () => {
-            const status = document.getElementById("photoStatus");
-            status.textContent = "Capturing...";
+                if (data.timelapse_running) {
+                    $("timelapseStatus").textContent =
+                        "Running — frames captured: " + data.timelapse_frames;
+                } else if (data.timelapse_filename) {
+                    $("timelapseStatus").textContent =
+                        "Finished: " + data.timelapse_filename;
+                }
 
-            const response = await fetch("/api/photo", { method: "POST" });
+                $("videoStartBtn").disabled =
+                    data.video_recording || data.timelapse_running;
+                $("videoStopBtn").disabled = !data.video_recording;
+
+                $("timelapseStartBtn").disabled =
+                    data.video_recording || data.timelapse_running;
+                $("timelapseStopBtn").disabled = !data.timelapse_running;
+
+                $("photoBtn").disabled =
+                    data.video_recording || data.timelapse_running;
+
+                if (!data.ffmpeg_available && data.timelapse_running === false) {
+                    $("timelapseStatus").title =
+                        "Portable FFmpeg is not installed. Frames will still be captured, but MP4 stitching will be skipped.";
+                }
+            } catch (error) {
+                // Server may be starting or stopping.
+            }
+        }
+
+        $("refreshBtn").addEventListener("click", loadCameras);
+
+        $("cameraSelect").addEventListener("change", async event => {
+            const response = await fetch(
+                "/api/camera/" + event.target.value,
+                { method: "POST" }
+            );
+
             const data = await response.json();
 
-            status.textContent = data.ok
+            if (!data.ok) {
+                alert(data.error);
+                return;
+            }
+
+            $("preview").src = "/video_feed?t=" + Date.now();
+        });
+
+        $("photoBtn").addEventListener("click", async () => {
+            $("photoStatus").textContent = "Capturing...";
+
+            const response = await fetch("/api/photo", {
+                method: "POST"
+            });
+            const data = await response.json();
+
+            $("photoStatus").textContent = data.ok
                 ? "Saved: " + data.filename
                 : "Error: " + data.error;
         });
 
+        $("videoStartBtn").addEventListener("click", async () => {
+            const response = await fetch("/api/video/start", {
+                method: "POST"
+            });
+            const data = await response.json();
+
+            $("videoStatus").textContent = data.ok
+                ? "Recording: " + data.filename
+                : "Error: " + data.error;
+
+            refreshStatus();
+        });
+
+        $("videoStopBtn").addEventListener("click", async () => {
+            $("videoStatus").textContent = "Stopping...";
+
+            const response = await fetch("/api/video/stop", {
+                method: "POST"
+            });
+            const data = await response.json();
+
+            $("videoStatus").textContent = data.ok
+                ? "Saved: " + data.filename
+                : "Error: " + data.error;
+
+            refreshStatus();
+        });
+
+        $("timelapseStartBtn").addEventListener("click", async () => {
+            const payload = {
+                interval: Number($("interval").value),
+                duration: Number($("duration").value),
+                start_at: $("startAt").value
+            };
+
+            const response = await fetch("/api/timelapse/start", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            $("timelapseStatus").textContent = data.ok
+                ? data.scheduled
+                    ? "Scheduled for " +
+                      new Date(data.scheduled).toLocaleString()
+                    : "Starting..."
+                : "Error: " + data.error;
+
+            refreshStatus();
+        });
+
+        $("timelapseStopBtn").addEventListener("click", async () => {
+            const response = await fetch("/api/timelapse/stop", {
+                method: "POST"
+            });
+            const data = await response.json();
+
+            $("timelapseStatus").textContent = data.ok
+                ? "Stopping and building MP4..."
+                : "Error: " + data.error;
+
+            refreshStatus();
+        });
+
         loadCameras();
+        refreshStatus();
+        setInterval(refreshStatus, 1000);
     </script>
 </body>
 </html>
