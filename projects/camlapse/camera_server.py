@@ -32,9 +32,11 @@ video_stop_event = threading.Event()
 video_filename = ""
 
 timelapse_running = False
+timelapse_finalizing = False
 timelapse_thread = None
 timelapse_stop_event = threading.Event()
 timelapse_filename = ""
+timelapse_error = ""
 timelapse_frames = 0
 
 
@@ -143,26 +145,28 @@ def generate_frames():
 
     streaming = True
 
-    while streaming:
-        frame = read_frame()
+    try:
+        while streaming:
+            frame = read_frame()
 
-        if frame is None:
-            time.sleep(0.1)
-            continue
+            if frame is None:
+                time.sleep(0.1)
+                continue
 
-        ok, encoded = cv2.imencode(".jpg", frame)
+            ok, encoded = cv2.imencode(".jpg", frame)
 
-        if not ok:
-            continue
+            if not ok:
+                continue
 
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n"
-            + encoded.tobytes()
-            + b"\r\n"
-        )
-
-    release_camera()
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n"
+                + encoded.tobytes()
+                + b"\r\n"
+            )
+    finally:
+        streaming = False
+        release_camera()
 
 
 def timestamp(prefix, extension):
@@ -184,6 +188,10 @@ def video_worker(filename):
 
     output = VIDEO_DIR / filename
     cap = get_camera()
+
+    if cap is None:
+        video_recording = False
+        return
 
     fps = cap.get(cv2.CAP_PROP_FPS)
 
@@ -227,8 +235,8 @@ def start_video_recording():
     if video_recording:
         return False, "Video recording is already running."
 
-    if timelapse_running:
-        return False, "Stop the timelapse before starting a video recording."
+    if timelapse_running or timelapse_finalizing:
+        return False, "Stop/finalize the timelapse before starting a video recording."
 
     video_filename = timestamp("video", "mp4")
     video_stop_event.clear()
@@ -260,16 +268,26 @@ def stop_video_recording():
 
 
 def build_timelapse_mp4(session_dir, session_name):
-    if not ffmpeg_available():
-        return ""
-
     output = TIMELAPSE_DIR / f"{session_name}.mp4"
+
+    if not ffmpeg_available():
+        return "", (
+            "FFmpeg was not found. Put ffmpeg.exe in "
+            "tools\\ffmpeg\\ffmpeg.exe."
+        )
+
+    frame_files = sorted(session_dir.glob("frame_*.jpg"))
+
+    if not frame_files:
+        return "", "No timelapse frames were captured."
 
     command = [
         str(LOCAL_FFMPEG),
         "-y",
         "-framerate",
         "30",
+        "-start_number",
+        "1",
         "-i",
         str(session_dir / "frame_%06d.jpg"),
         "-c:v",
@@ -289,17 +307,21 @@ def build_timelapse_mp4(session_dir, session_name):
             timeout=3600,
         )
 
-        if result.returncode == 0 and output.exists():
-            return output.name
+        if result.returncode == 0 and output.exists() and output.stat().st_size > 0:
+            return output.name, ""
 
-    except (OSError, subprocess.SubprocessError):
-        pass
+        error = (result.stderr or result.stdout or "FFmpeg failed without an error message.").strip()
+        return "", f"FFmpeg could not create the timelapse: {error[-1000:]}"
 
-    return ""
+    except subprocess.TimeoutExpired:
+        return "", "FFmpeg timed out while creating the timelapse."
+    except OSError as exc:
+        return "", f"Could not start FFmpeg: {exc}"
 
 
 def timelapse_worker(interval_seconds, duration_seconds, scheduled_start, session_name):
-    global timelapse_running, timelapse_frames, timelapse_filename
+    global timelapse_running, timelapse_finalizing
+    global timelapse_frames, timelapse_filename, timelapse_error
 
     session_dir = TIMELAPSE_DIR / session_name
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -339,15 +361,23 @@ def timelapse_worker(interval_seconds, duration_seconds, scheduled_start, sessio
             if frame is not None:
                 frame_number += 1
                 filename = session_dir / f"frame_{frame_number:06d}.jpg"
-                cv2.imwrite(str(filename), frame)
-                timelapse_frames = frame_number
+
+                if cv2.imwrite(str(filename), frame):
+                    timelapse_frames = frame_number
 
             next_capture = time.monotonic() + interval_seconds
 
-        timelapse_filename = build_timelapse_mp4(session_dir, session_name)
+        if timelapse_frames > 0:
+            timelapse_running = False
+            timelapse_finalizing = True
+            timelapse_filename, timelapse_error = build_timelapse_mp4(
+                session_dir,
+                session_name,
+            )
 
     finally:
         timelapse_running = False
+        timelapse_finalizing = False
 
 
 @app.route("/")
@@ -367,7 +397,7 @@ def cameras():
 def select_camera(index):
     global selected_camera
 
-    if video_recording or timelapse_running:
+    if video_recording or timelapse_running or timelapse_finalizing:
         return jsonify({
             "ok": False,
             "error": "Stop recording before changing cameras.",
@@ -392,10 +422,10 @@ def video_feed():
 
 @app.route("/api/photo", methods=["POST"])
 def take_photo():
-    if video_recording or timelapse_running:
+    if video_recording or timelapse_running or timelapse_finalizing:
         return jsonify({
             "ok": False,
-            "error": "Stop recording before taking a photo.",
+            "error": "Stop/finalize recording before taking a photo.",
         }), 409
 
     frame = read_frame()
@@ -455,7 +485,7 @@ def api_video_stop():
 @app.route("/api/timelapse/start", methods=["POST"])
 def api_timelapse_start():
     global timelapse_running, timelapse_thread
-    global timelapse_filename, timelapse_frames
+    global timelapse_filename, timelapse_error, timelapse_frames
 
     if video_recording:
         return jsonify({
@@ -463,10 +493,10 @@ def api_timelapse_start():
             "error": "Stop video recording before starting a timelapse.",
         }), 409
 
-    if timelapse_running:
+    if timelapse_running or timelapse_finalizing:
         return jsonify({
             "ok": False,
-            "error": "A timelapse is already running.",
+            "error": "A timelapse is already running or finalizing.",
         }), 409
 
     data = request.get_json(silent=True) or {}
@@ -499,8 +529,10 @@ def api_timelapse_start():
             }), 400
 
     timelapse_running = True
+    timelapse_finalizing = False
     timelapse_stop_event.clear()
     timelapse_filename = ""
+    timelapse_error = ""
     timelapse_frames = 0
 
     session_name = datetime.now().strftime("timelapse_%Y%m%d_%H%M%S")
@@ -549,8 +581,10 @@ def status():
         "video_recording": video_recording,
         "video_filename": video_filename,
         "timelapse_running": timelapse_running,
+        "timelapse_finalizing": timelapse_finalizing,
         "timelapse_frames": timelapse_frames,
         "timelapse_filename": timelapse_filename,
+        "timelapse_error": timelapse_error,
         "ffmpeg_available": ffmpeg_available(),
         "media_dir": str(MEDIA_DIR),
     })
