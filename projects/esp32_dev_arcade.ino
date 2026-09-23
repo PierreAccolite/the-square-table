@@ -32,6 +32,7 @@
  *   - First additional games: Snake + Breakout
  *
  * Pocket Arcade Wi-Fi AP + web portal foundation.
+ * Wi-Fi can be enabled/disabled from the OLED menu.
  */
 
 #include <Wire.h>
@@ -56,6 +57,10 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 const char* AP_SSID = "POCKET_ARCADE";
 const char* AP_PASSWORD = "arcade123";
 WebServer webServer(80);
+
+bool wifiPortalEnabled = false;
+bool wifiApStarted = false;
+String wifiStatusMessage = "OFF";
 
 const char POCKET_ARCADE_PAGE[] PROGMEM = R"rawliteral(
 <!DOCTYPE html><html lang="en"><head>
@@ -102,22 +107,90 @@ void handleNotFound() {
 
 void startPocketArcadeWiFi() {
   WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
-  WiFi.softAP(AP_SSID, AP_PASSWORD);
-  webServer.on("/", handleRoot);
-  webServer.onNotFound(handleNotFound);
-  webServer.begin();
+  WiFi.setSleep(false);
+
+  WiFi.softAPConfig(
+    IPAddress(192,168,4,1),
+    IPAddress(192,168,4,1),
+    IPAddress(255,255,255,0)
+  );
+
   Serial.println();
-  Serial.println("=== POCKET ARCADE Wi-Fi ===");
-  Serial.println("Wi-Fi AP is ready.");
-  Serial.print("Connect to SSID: "); Serial.println(AP_SSID);
-  Serial.print("Password: "); Serial.println(AP_PASSWORD);
-  Serial.print("Open: http://"); Serial.println(WiFi.softAPIP());
-  Serial.print("Connected stations: "); Serial.println(WiFi.softAPgetStationNum());
+  Serial.println("=== POCKET ARCADE Wi-Fi START ===");
+  Serial.println("Starting Wi-Fi AP...");
+
+  // Explicit 2.4 GHz channel 1, visible SSID, up to 4 stations.
+  bool apStarted = WiFi.softAP(AP_SSID, AP_PASSWORD, 1, false, 4);
+  wifiApStarted = apStarted;
+  wifiPortalEnabled = apStarted;
+
+  Serial.print("Wi-Fi AP start: ");
+  Serial.println(apStarted ? "SUCCESS" : "FAILED");
+  Serial.print("Wi-Fi mode: ");
+  Serial.println(WiFi.getMode());
+  Serial.print("SSID: ");
+  Serial.println(AP_SSID);
+  Serial.print("Password: ");
+  Serial.println(AP_PASSWORD);
+  Serial.print("AP IP: ");
+  Serial.println(WiFi.softAPIP());
+  Serial.print("AP MAC: ");
+  Serial.println(WiFi.softAPmacAddress());
+  Serial.print("Channel: ");
+  Serial.println(WiFi.channel());
+  Serial.print("Connected stations: ");
+  Serial.println(WiFi.softAPgetStationNum());
+
+  if (apStarted) {
+    wifiStatusMessage = "ON";
+    webServer.begin();
+    Serial.println("Web server: STARTED");
+    Serial.print("Open: http://");
+    Serial.println(WiFi.softAPIP());
+  } else {
+    wifiStatusMessage = "FAILED";
+    Serial.println("Web server: NOT STARTED");
+  }
+
+  Serial.println("==============================");
+}
+
+void stopPocketArcadeWiFi() {
+  Serial.println();
+  Serial.println("=== POCKET ARCADE Wi-Fi STOP ===");
+
+  webServer.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+
+  wifiPortalEnabled = false;
+  wifiApStarted = false;
+  wifiStatusMessage = "OFF";
+
+  Serial.println("Wi-Fi AP: OFF");
+  Serial.println("==============================");
+}
+
+void showWiFiSerialStatus() {
+  Serial.println();
+  Serial.println("=== POCKET ARCADE Wi-Fi STATUS ===");
+  Serial.print("AP: ");
+  Serial.println(wifiPortalEnabled ? "ON" : "OFF");
+  Serial.print("AP started: ");
+  Serial.println(wifiApStarted ? "YES" : "NO");
+  Serial.print("SSID: ");
+  Serial.println(AP_SSID);
+  Serial.print("IP: ");
+  Serial.println(WiFi.softAPIP());
+  Serial.print("Channel: ");
+  Serial.println(WiFi.channel());
+  Serial.print("Stations: ");
+  Serial.println(WiFi.softAPgetStationNum());
+  Serial.println("==================================");
 }
 
 // -------------------- States --------------------
-enum GameState { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER };
+enum GameState { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER, STATE_WIFI };
 enum GameType  {
   GAME_DINO=0,
   GAME_BOXES=1,
@@ -134,6 +207,8 @@ enum GameType  {
 };
 
 const int GAME_COUNT = 12;
+const int MENU_COUNT = GAME_COUNT + 1;
+const int MENU_WIFI_INDEX = GAME_COUNT;
 const int MENU_VISIBLE = 4;
 const unsigned long FRAME_TIME_MS = 30;
 
@@ -256,7 +331,8 @@ const char* gameNames[GAME_COUNT] = {
   "9. Flappy",
   "10. Racing",
   "11. Memory",
-  "12. Coin Collector"
+  "12. Coin Collector",
+  "13. Wi-Fi Portal"
 };
 
 // -------------------- Timing --------------------
@@ -346,11 +422,11 @@ void drawMenu() {
   display.setCursor(101, 0);
   display.print(menuSelection + 1);
   display.print("/");
-  display.print(GAME_COUNT);
+  display.print(MENU_COUNT);
 
   for (int row = 0; row < MENU_VISIBLE; row++) {
     int index = menuTop + row;
-    if (index >= GAME_COUNT) break;
+    if (index >= MENU_COUNT) break;
 
     display.setCursor(5, 13 + row * 12);
     display.print(index == menuSelection ? "> " : "  ");
@@ -362,7 +438,7 @@ void drawMenu() {
     display.print("^");
   }
 
-  if (menuTop + MENU_VISIBLE < GAME_COUNT) {
+  if (menuTop + MENU_VISIBLE < MENU_COUNT) {
     display.setCursor(122, 49);
     display.print("v");
   }
@@ -375,7 +451,7 @@ void updateMenu() {
   int dir = joyYDir();
 
   if (dir != 0 && lastDir == 0) {
-    menuSelection = constrain(menuSelection + dir, 0, GAME_COUNT - 1);
+    menuSelection = constrain(menuSelection + dir, 0, MENU_COUNT - 1);
 
     if (menuSelection < menuTop)
       menuTop = menuSelection;
@@ -387,8 +463,73 @@ void updateMenu() {
   lastDir = dir;
 
   if (buttonPressed()) {
+    if (menuSelection == MENU_WIFI_INDEX) {
+      state = STATE_WIFI;
+      showWiFiSerialStatus();
+      return;
+    }
+
     currentGame = (GameType)menuSelection;
     startGame();
+  }
+}
+
+
+void drawWiFiStatus() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(27, 0);
+  display.print("WI-FI PORTAL");
+
+  display.setCursor(4, 13);
+  display.print("Status: ");
+  display.print(wifiPortalEnabled ? "ON" : wifiStatusMessage.c_str());
+
+  display.setCursor(4, 24);
+  display.print("SSID: ");
+  display.print(AP_SSID);
+
+  display.setCursor(4, 35);
+  display.print("IP: ");
+  if (wifiPortalEnabled) display.print(WiFi.softAPIP());
+  else display.print("OFF");
+
+  display.setCursor(4, 46);
+  display.print("Users: ");
+  display.print(wifiPortalEnabled ? WiFi.softAPgetStationNum() : 0);
+
+  display.setCursor(4, 57);
+  display.print(wifiPortalEnabled ? "BTN: Wi-Fi OFF" : "BTN: Wi-Fi ON");
+
+  display.display();
+}
+
+void updateWiFiStatus() {
+  static int lastDir = 0;
+  int dir = joyYDir();
+
+  // Up/down exits the status screen and returns to the menu.
+  if (dir != 0 && lastDir == 0) {
+    state = STATE_MENU;
+    if (menuSelection < menuTop) menuTop = menuSelection;
+    if (menuSelection >= menuTop + MENU_VISIBLE)
+      menuTop = menuSelection - MENU_VISIBLE + 1;
+    lastDir = dir;
+    return;
+  }
+
+  lastDir = dir;
+
+  // Button toggles the AP while staying on this screen.
+  if (buttonPressed()) {
+    if (wifiPortalEnabled) {
+      stopPocketArcadeWiFi();
+    } else {
+      startPocketArcadeWiFi();
+    }
+    showWiFiSerialStatus();
   }
 }
 
@@ -1154,12 +1295,18 @@ void setup() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) while(1) delay(100);
   display.clearDisplay();
   display.display();
+  webServer.on("/", handleRoot);
+  webServer.onNotFound(handleNotFound);
+
+  // Wi-Fi starts enabled so the portal is available immediately.
   startPocketArcadeWiFi();
+
   state = STATE_MENU;
 }
 
 void loop() {
-  webServer.handleClient();
+  if (wifiPortalEnabled)
+    webServer.handleClient();
 
   unsigned long now = millis();
 
@@ -1192,6 +1339,11 @@ void loop() {
     case STATE_GAMEOVER:
       updateGameOver();
       drawGameOver();
+      break;
+
+    case STATE_WIFI:
+      updateWiFiStatus();
+      drawWiFiStatus();
       break;
   }
 }
