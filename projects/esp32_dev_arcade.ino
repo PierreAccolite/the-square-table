@@ -10,15 +10,22 @@
  * Joystick VRy = GPIO33
  * Joystick SW  = GPIO25
  *
- * Current baseline:
+ * V3 foundation:
  *   1. Dino Jump
  *   2. Box Climber
  *   3. Free Walk
  *   4. Ping Pong
+ *   5. Snake
  *
- * This file is the known-good baseline for the LA LINEA GAMES project.
- * Future versions will add the expanded game framework, more games,
- * Wi-Fi AP/web portal and Android browser support.
+ * V3 adds:
+ *   - Scrollable game menu
+ *   - Explicit function prototypes
+ *   - RAM high-score framework
+ *   - Non-blocking frame timing foundation
+ *   - First additional game: Snake
+ *
+ * Future versions will add more games, Wi-Fi AP/web portal,
+ * Android browser support and persistent high scores.
  */
 
 #include <Wire.h>
@@ -40,7 +47,17 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // -------------------- States --------------------
 enum GameState { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER };
-enum GameType  { GAME_DINO=0, GAME_BOXES=1, GAME_FREE=2, GAME_PONG=3 };
+enum GameType  {
+  GAME_DINO=0,
+  GAME_BOXES=1,
+  GAME_FREE=2,
+  GAME_PONG=3,
+  GAME_SNAKE=4
+};
+
+const int GAME_COUNT = 5;
+const int MENU_VISIBLE = 4;
+const unsigned long FRAME_TIME_MS = 30;
 
 GameState state = STATE_MENU;
 GameType  currentGame = GAME_DINO;
@@ -74,6 +91,41 @@ int ballX = 64, ballY = 32;
 int ballVX = 2, ballVY = -2;
 int pongScore = 0;
 int pongLives = 3;
+
+// -------------------- Game 5 Snake --------------------
+const int SNAKE_CELL = 4;
+const int SNAKE_ORIGIN_Y = 10;
+const int SNAKE_COLS = SCREEN_WIDTH / SNAKE_CELL;
+const int SNAKE_ROWS = 13;
+const int SNAKE_MAX = 120;
+
+int snakeX[SNAKE_MAX];
+int snakeY[SNAKE_MAX];
+int snakeLength = 4;
+int snakeDirX = 1;
+int snakeDirY = 0;
+int snakeNextDirX = 1;
+int snakeNextDirY = 0;
+int snakeFoodX = 20;
+int snakeFoodY = 6;
+int snakeScore = 0;
+unsigned long snakeLastMove = 0;
+
+// Simple RAM high-score table. Persistent storage comes later.
+int highScores[GAME_COUNT] = {0, 0, 0, 0, 0};
+
+// -------------------- Menu --------------------
+int menuTop = 0;
+const char* gameNames[GAME_COUNT] = {
+  "1. Dino Jump",
+  "2. Box Climber",
+  "3. Free Walk",
+  "4. Ping Pong",
+  "5. Snake"
+};
+
+// -------------------- Timing --------------------
+unsigned long lastFrame = 0;
 
 // =====================================================
 //  JOYSTICK helpers (wide dead-zone)
@@ -134,29 +186,51 @@ void drawMenu() {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(18, 0);
+
+  display.setCursor(12, 0);
   display.print("LA LINEA GAMES");
 
-  const char* names[] = {
-    "1. Dino Jump",
-    "2. Box Climber",
-    "3. Free Walk",
-    "4. Ping Pong"
-  };
+  display.setCursor(108, 0);
+  display.print(menuSelection + 1);
+  display.print("/");
+  display.print(GAME_COUNT);
 
-  for (int i = 0; i < 4; i++) {
-    display.setCursor(8, 14 + i * 12);
-    display.print(i == menuSelection ? "> " : "  ");
-    display.print(names[i]);
+  for (int row = 0; row < MENU_VISIBLE; row++) {
+    int index = menuTop + row;
+    if (index >= GAME_COUNT) break;
+
+    display.setCursor(5, 13 + row * 12);
+    display.print(index == menuSelection ? "> " : "  ");
+    display.print(gameNames[index]);
   }
+
+  if (menuTop > 0) {
+    display.setCursor(122, 13);
+    display.print("^");
+  }
+
+  if (menuTop + MENU_VISIBLE < GAME_COUNT) {
+    display.setCursor(122, 49);
+    display.print("v");
+  }
+
   display.display();
 }
 
 void updateMenu() {
   static int lastDir = 0;
   int dir = joyYDir();
-  if (dir != 0 && lastDir == 0)
-    menuSelection = constrain(menuSelection + dir, 0, 3);
+
+  if (dir != 0 && lastDir == 0) {
+    menuSelection = constrain(menuSelection + dir, 0, GAME_COUNT - 1);
+
+    if (menuSelection < menuTop)
+      menuTop = menuSelection;
+
+    if (menuSelection >= menuTop + MENU_VISIBLE)
+      menuTop = menuSelection - MENU_VISIBLE + 1;
+  }
+
   lastDir = dir;
 
   if (buttonPressed()) {
@@ -168,23 +242,43 @@ void updateMenu() {
 // =====================================================
 //  GAME OVER
 // =====================================================
+int currentScore() {
+  if (currentGame == GAME_DINO)  return dinoScore;
+  if (currentGame == GAME_BOXES) return boxLevel;
+  if (currentGame == GAME_PONG)  return pongScore;
+  if (currentGame == GAME_SNAKE) return snakeScore;
+  return 0;
+}
+
+void recordScore() {
+  int score = currentScore();
+  if (score > highScores[currentGame])
+    highScores[currentGame] = score;
+}
+
+void enterGameOver() {
+  recordScore();
+  enterGameOver();
+}
+
 void drawGameOver() {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(34, 4);
+  display.setCursor(34, 2);
   display.print("GAME OVER");
 
-  display.setCursor(20, 20);
+  display.setCursor(20, 16);
   display.print("Score: ");
-  if (currentGame == GAME_DINO)  display.print(dinoScore);
-  if (currentGame == GAME_BOXES) display.print(boxLevel);
-  if (currentGame == GAME_PONG)  display.print(pongScore);
-  if (currentGame == GAME_FREE)  display.print("-");
+  display.print(currentScore());
 
-  display.setCursor(10, 40);
+  display.setCursor(20, 27);
+  display.print("Best:  ");
+  display.print(highScores[currentGame]);
+
+  display.setCursor(10, 42);
   display.print(gameOverSelection == 0 ? "> Restart" : "  Restart");
-  display.setCursor(10, 52);
+  display.setCursor(10, 54);
   display.print(gameOverSelection == 1 ? "> Menu"    : "  Menu");
   display.display();
 }
@@ -229,6 +323,26 @@ void startGame() {
     ballVX = 2; ballVY = -2;
     pongScore = 0; pongLives = 3;
   }
+  else if (currentGame == GAME_SNAKE) {
+    snakeLength = 4;
+    snakeDirX = 1;
+    snakeDirY = 0;
+    snakeNextDirX = 1;
+    snakeNextDirY = 0;
+    snakeScore = 0;
+
+    int startX = SNAKE_COLS / 2;
+    int startY = SNAKE_ROWS / 2;
+
+    for (int i = 0; i < snakeLength; i++) {
+      snakeX[i] = startX - i;
+      snakeY[i] = startY;
+    }
+
+    snakeFoodX = 20;
+    snakeFoodY = 6;
+    snakeLastMove = millis();
+  }
 }
 
 // =====================================================
@@ -260,7 +374,7 @@ void updateDino() {
   for (int i=0;i<4;i++) if (spikes[i].active) {
     spikes[i].x -= 3;
     if (spikes[i].x < manX+6 && spikes[i].x+8 > manX-4 && manY<9) {
-      state = STATE_GAMEOVER; gameOverSelection=0;
+      enterGameOver();
     }
     if (spikes[i].x < -12) { spikes[i].active=false; dinoScore++; }
   }
@@ -332,8 +446,7 @@ void updateBoxes() {
     manY = 0;
     manVy = 0;
     if (highestReached > 15) {
-      state = STATE_GAMEOVER;
-      gameOverSelection = 0;
+      enterGameOver();
     }
   }
 
@@ -342,8 +455,7 @@ void updateBoxes() {
   if (cameraY < 0) cameraY = 0;
 
   if (manY < cameraY - 20) {
-    state = STATE_GAMEOVER;
-    gameOverSelection = 0;
+    enterGameOver();
   }
 
   frameCnt++;
@@ -430,8 +542,7 @@ void updatePong() {
     ballVX = (random(0,2)?2:-2);
     ballVY = -2;
     if (pongLives <= 0) {
-      state = STATE_GAMEOVER;
-      gameOverSelection = 0;
+      enterGameOver();
     }
   }
 }
@@ -452,12 +563,140 @@ void drawPong() {
 }
 
 // =====================================================
+//  GAME 5 – Snake
+// =====================================================
+void placeSnakeFood() {
+  for (int attempts = 0; attempts < 100; attempts++) {
+    int fx = random(0, SNAKE_COLS);
+    int fy = random(0, SNAKE_ROWS);
+
+    bool occupied = false;
+    for (int i = 0; i < snakeLength; i++) {
+      if (snakeX[i] == fx && snakeY[i] == fy) {
+        occupied = true;
+        break;
+      }
+    }
+
+    if (!occupied) {
+      snakeFoodX = fx;
+      snakeFoodY = fy;
+      return;
+    }
+  }
+}
+
+void updateSnake() {
+  // Read joystick direction continuously, but only accept 90-degree turns.
+  int x = joyXDir();
+  int y = joyYDir();
+
+  if (x != 0 && snakeDirX == 0) {
+    snakeNextDirX = x;
+    snakeNextDirY = 0;
+  }
+  else if (y != 0 && snakeDirY == 0) {
+    snakeNextDirX = 0;
+    snakeNextDirY = y;
+  }
+
+  unsigned long now = millis();
+
+  int moveInterval = 150 - (snakeScore * 4);
+  if (moveInterval < 70) moveInterval = 70;
+
+  if (now - snakeLastMove < (unsigned long)moveInterval)
+    return;
+
+  snakeLastMove = now;
+  snakeDirX = snakeNextDirX;
+  snakeDirY = snakeNextDirY;
+
+  int newX = snakeX[0] + snakeDirX;
+  int newY = snakeY[0] + snakeDirY;
+
+  // Wrap-around keeps the first Snake version simple and arcade-like.
+  if (newX < 0) newX = SNAKE_COLS - 1;
+  if (newX >= SNAKE_COLS) newX = 0;
+  if (newY < 0) newY = SNAKE_ROWS - 1;
+  if (newY >= SNAKE_ROWS) newY = 0;
+
+  bool ateFood = (newX == snakeFoodX && newY == snakeFoodY);
+
+  // If not eating, the old tail moves away, so it is not a collision target.
+  int collisionLength = ateFood ? snakeLength : snakeLength - 1;
+
+  for (int i = 0; i < collisionLength; i++) {
+    if (snakeX[i] == newX && snakeY[i] == newY) {
+      enterGameOver();
+      return;
+    }
+  }
+
+  int newLength = snakeLength + (ateFood ? 1 : 0);
+
+  if (newLength > SNAKE_MAX)
+    newLength = SNAKE_MAX;
+
+  for (int i = newLength - 1; i > 0; i--) {
+    snakeX[i] = snakeX[i - 1];
+    snakeY[i] = snakeY[i - 1];
+  }
+
+  snakeX[0] = newX;
+  snakeY[0] = newY;
+  snakeLength = newLength;
+
+  if (ateFood) {
+    snakeScore++;
+    placeSnakeFood();
+  }
+}
+
+void drawSnake() {
+  display.clearDisplay();
+
+  display.setCursor(0, 0);
+  display.print("Snake:");
+  display.print(snakeScore);
+
+  display.setCursor(78, 0);
+  display.print("Best:");
+  display.print(highScores[GAME_SNAKE]);
+
+  // Playfield border.
+  display.drawRect(0, SNAKE_ORIGIN_Y - 1,
+                   SCREEN_WIDTH, SNAKE_ROWS * SNAKE_CELL + 2,
+                   SSD1306_WHITE);
+
+  // Food.
+  int foodPx = snakeFoodX * SNAKE_CELL;
+  int foodPy = SNAKE_ORIGIN_Y + snakeFoodY * SNAKE_CELL;
+  display.fillRect(foodPx, foodPy, SNAKE_CELL, SNAKE_CELL, SSD1306_WHITE);
+
+  // Snake.
+  for (int i = snakeLength - 1; i >= 0; i--) {
+    int px = snakeX[i] * SNAKE_CELL;
+    int py = SNAKE_ORIGIN_Y + snakeY[i] * SNAKE_CELL;
+
+    if (i == 0)
+      display.fillRect(px, py, SNAKE_CELL, SNAKE_CELL, SSD1306_WHITE);
+    else
+      display.drawRect(px, py, SNAKE_CELL, SNAKE_CELL, SSD1306_WHITE);
+  }
+
+  display.display();
+}
+
+// =====================================================
 //  MAIN
 // =====================================================
 void setup() {
   Serial.begin(115200);
   pinMode(JOY_BTN, INPUT_PULLUP);
   Wire.begin(OLED_SDA, OLED_SCL);
+  randomSeed(micros());
+
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) while(1) delay(100);
   display.clearDisplay();
   display.display();
@@ -465,6 +704,13 @@ void setup() {
 }
 
 void loop() {
+  unsigned long now = millis();
+
+  if (now - lastFrame < FRAME_TIME_MS)
+    return;
+
+  lastFrame = now;
+
   switch (state) {
     case STATE_MENU:
       updateMenu();
@@ -476,6 +722,7 @@ void loop() {
       else if (currentGame == GAME_BOXES) { updateBoxes(); drawBoxes(); }
       else if (currentGame == GAME_FREE)  { updateFree();  drawFree();  }
       else if (currentGame == GAME_PONG)  { updatePong();  drawPong();  }
+      else if (currentGame == GAME_SNAKE) { updateSnake(); drawSnake(); }
       break;
 
     case STATE_GAMEOVER:
@@ -483,6 +730,4 @@ void loop() {
       drawGameOver();
       break;
   }
-
-  delay(30);
 }
