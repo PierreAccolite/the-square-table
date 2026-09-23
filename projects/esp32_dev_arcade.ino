@@ -942,12 +942,24 @@ void updateInvaders(){
     else invaderOffsetX+=invaderDir*3;
   }
   for(int i=0;i<INV_MAX_BULLETS;i++) if(invaderBulletActive[i]){
-    invaderBulletY[i]-=5; if(invaderBulletY[i]<8){invaderBulletActive[i]=false;continue;}
-    for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++) if(invaders[r][col]){
-      int ix=10+col*20+invaderOffsetX, iy=12+r*9+invaderDrop;
-      if(abs(invaderBulletX[i]-ix)<7 && abs(invaderBulletY[i]-iy)<5){invaders[r][col]=false;invaderBulletActive[i]=false;invaderScore++;goto invaderHitDone;}
+    invaderBulletY[i]-=5;
+    if(invaderBulletY[i]<8){invaderBulletActive[i]=false;continue;}
+
+    bool hit = false;
+    for(int r=0;r<INV_ROWS && !hit;r++) {
+      for(int col=0;col<INV_COLS;col++) {
+        if(!invaders[r][col]) continue;
+        int ix=10+col*20+invaderOffsetX;
+        int iy=12+r*9+invaderDrop;
+        if(abs(invaderBulletX[i]-ix)<7 && abs(invaderBulletY[i]-iy)<5){
+          invaders[r][col]=false;
+          invaderBulletActive[i]=false;
+          invaderScore++;
+          hit = true;
+          break;
+        }
+      }
     }
-    invaderHitDone:;
   }
   for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col]){
     int iy=12+r*9+invaderDrop;
