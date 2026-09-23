@@ -109,9 +109,11 @@ void startPocketArcadeWiFi() {
   webServer.begin();
   Serial.println();
   Serial.println("=== POCKET ARCADE Wi-Fi ===");
-  Serial.print("SSID: "); Serial.println(AP_SSID);
+  Serial.println("Wi-Fi AP is ready.");
+  Serial.print("Connect to SSID: "); Serial.println(AP_SSID);
   Serial.print("Password: "); Serial.println(AP_PASSWORD);
-  Serial.print("Web: http://"); Serial.println(WiFi.softAPIP());
+  Serial.print("Open: http://"); Serial.println(WiFi.softAPIP());
+  Serial.print("Connected stations: "); Serial.println(WiFi.softAPgetStationNum());
 }
 
 // -------------------- States --------------------
