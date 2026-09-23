@@ -106,8 +106,19 @@ void handleNotFound() {
 }
 
 void startPocketArcadeWiFi() {
+  Serial.println();
+  Serial.println("=== POCKET ARCADE Wi-Fi START ===");
+  Serial.println("Resetting Wi-Fi radio...");
+
+  // Fully reset the radio before starting the AP.
+  // This avoids stale AP/STA state from previous starts.
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+  delay(200);
+
   WiFi.mode(WIFI_AP);
   WiFi.setSleep(false);
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);
 
   WiFi.softAPConfig(
     IPAddress(192,168,4,1),
@@ -115,12 +126,13 @@ void startPocketArcadeWiFi() {
     IPAddress(255,255,255,0)
   );
 
-  Serial.println();
-  Serial.println("=== POCKET ARCADE Wi-Fi START ===");
   Serial.println("Starting Wi-Fi AP...");
+  Serial.println("Channel: 6");
+  Serial.println("SSID broadcast: YES");
+  Serial.println("TX power: 19.5 dBm");
 
-  // Explicit 2.4 GHz channel 1, visible SSID, up to 4 stations.
-  bool apStarted = WiFi.softAP(AP_SSID, AP_PASSWORD, 1, false, 4);
+  // Channel 6 is a standard 2.4 GHz channel and visible SSID.
+  bool apStarted = WiFi.softAP(AP_SSID, AP_PASSWORD, 6, false, 4);
   wifiApStarted = apStarted;
   wifiPortalEnabled = apStarted;
 
@@ -128,8 +140,10 @@ void startPocketArcadeWiFi() {
   Serial.println(apStarted ? "SUCCESS" : "FAILED");
   Serial.print("Wi-Fi mode: ");
   Serial.println(WiFi.getMode());
-  Serial.print("SSID: ");
+  Serial.print("Configured SSID: ");
   Serial.println(AP_SSID);
+  Serial.print("Active SSID: ");
+  Serial.println(WiFi.softAPSSID());
   Serial.print("Password: ");
   Serial.println(AP_PASSWORD);
   Serial.print("AP IP: ");
