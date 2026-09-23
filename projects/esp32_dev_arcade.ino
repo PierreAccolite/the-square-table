@@ -319,7 +319,7 @@ int highScores[GAME_COUNT] = {0, 0, 0, 0, 0};
 
 // -------------------- Menu --------------------
 int menuTop = 0;
-const char* gameNames[GAME_COUNT] = {
+const char* gameNames[MENU_COUNT] = {
   "1. Dino Jump",
   "2. Box Climber",
   "3. Free Walk",
