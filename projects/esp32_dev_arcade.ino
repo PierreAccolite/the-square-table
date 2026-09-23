@@ -16,13 +16,14 @@
  *   3. Free Walk
  *   4. Ping Pong
  *   5. Snake
+ *   6. Breakout
  *
  * V3 adds:
  *   - Scrollable game menu
  *   - Explicit function prototypes
  *   - RAM high-score framework
  *   - Non-blocking frame timing foundation
- *   - First additional game: Snake
+ *   - First additional games: Snake + Breakout
  *
  * Future versions will add more games, Wi-Fi AP/web portal,
  * Android browser support and persistent high scores.
@@ -52,10 +53,11 @@ enum GameType  {
   GAME_BOXES=1,
   GAME_FREE=2,
   GAME_PONG=3,
-  GAME_SNAKE=4
+  GAME_SNAKE=4,
+  GAME_BREAKOUT=5
 };
 
-const int GAME_COUNT = 5;
+const int GAME_COUNT = 6;
 const int MENU_VISIBLE = 4;
 const unsigned long FRAME_TIME_MS = 30;
 
@@ -111,6 +113,18 @@ int snakeFoodY = 6;
 int snakeScore = 0;
 unsigned long snakeLastMove = 0;
 
+// -------------------- Game 6 Breakout --------------------
+const int BRICK_ROWS = 4;
+const int BRICK_COLS = 8;
+bool bricks[BRICK_ROWS][BRICK_COLS];
+int breakoutPaddleX = 50;
+int breakoutBallX = 64;
+int breakoutBallY = 50;
+int breakoutBallVX = 2;
+int breakoutBallVY = -2;
+int breakoutScore = 0;
+int breakoutLives = 3;
+
 // Simple RAM high-score table. Persistent storage comes later.
 int highScores[GAME_COUNT] = {0, 0, 0, 0, 0};
 
@@ -121,7 +135,8 @@ const char* gameNames[GAME_COUNT] = {
   "2. Box Climber",
   "3. Free Walk",
   "4. Ping Pong",
-  "5. Snake"
+  "5. Snake",
+  "6. Breakout"
 };
 
 // -------------------- Timing --------------------
@@ -136,6 +151,8 @@ int currentScore();
 void recordScore();
 void updateSnake();
 void drawSnake();
+void updateBreakout();
+void drawBreakout();
 
 // =====================================================
 //  JOYSTICK helpers (wide dead-zone)
@@ -257,6 +274,7 @@ int currentScore() {
   if (currentGame == GAME_BOXES) return boxLevel;
   if (currentGame == GAME_PONG)  return pongScore;
   if (currentGame == GAME_SNAKE) return snakeScore;
+  if (currentGame == GAME_BREAKOUT) return breakoutScore;
   return 0;
 }
 
@@ -268,7 +286,8 @@ void recordScore() {
 
 void enterGameOver() {
   recordScore();
-  enterGameOver();
+  state = STATE_GAMEOVER;
+  gameOverSelection = 0;
 }
 
 void drawGameOver() {
@@ -352,6 +371,19 @@ void startGame() {
     snakeFoodX = 20;
     snakeFoodY = 6;
     snakeLastMove = millis();
+  }
+  else if (currentGame == GAME_BREAKOUT) {
+    breakoutPaddleX = 50;
+    breakoutBallX = 64;
+    breakoutBallY = 50;
+    breakoutBallVX = random(0, 2) ? 2 : -2;
+    breakoutBallVY = -2;
+    breakoutScore = 0;
+    breakoutLives = 3;
+
+    for (int r = 0; r < BRICK_ROWS; r++)
+      for (int col = 0; col < BRICK_COLS; col++)
+        bricks[r][col] = true;
   }
 }
 
@@ -699,6 +731,111 @@ void drawSnake() {
 }
 
 // =====================================================
+//  GAME 6 – Breakout
+// =====================================================
+void updateBreakout() {
+  int dir = joyXDir();
+  breakoutPaddleX += dir * 3;
+  breakoutPaddleX = constrain(breakoutPaddleX, 0, SCREEN_WIDTH - 24);
+
+  breakoutBallX += breakoutBallVX;
+  breakoutBallY += breakoutBallVY;
+
+  if (breakoutBallX <= 0) {
+    breakoutBallX = 0;
+    breakoutBallVX = abs(breakoutBallVX);
+  }
+  if (breakoutBallX >= SCREEN_WIDTH - 3) {
+    breakoutBallX = SCREEN_WIDTH - 3;
+    breakoutBallVX = -abs(breakoutBallVX);
+  }
+
+  if (breakoutBallY <= 12) {
+    breakoutBallY = 12;
+    breakoutBallVY = abs(breakoutBallVY);
+  }
+
+  // Paddle collision.
+  if (breakoutBallVY > 0 &&
+      breakoutBallY + 3 >= 57 &&
+      breakoutBallY <= 61 &&
+      breakoutBallX + 3 >= breakoutPaddleX &&
+      breakoutBallX <= breakoutPaddleX + 24) {
+    breakoutBallY = 54;
+    breakoutBallVY = -abs(breakoutBallVY);
+
+    int offset = breakoutBallX - (breakoutPaddleX + 12);
+    breakoutBallVX = constrain(2 + (offset / 6), -3, 3);
+    if (breakoutBallVX == 0) breakoutBallVX = (offset < 0) ? -1 : 1;
+  }
+
+  // Brick collision.
+  int brickW = 16;
+  int brickH = 6;
+  int brickTop = 14;
+
+  int col = breakoutBallX / brickW;
+  int row = (breakoutBallY - brickTop) / brickH;
+
+  if (col >= 0 && col < BRICK_COLS &&
+      row >= 0 && row < BRICK_ROWS &&
+      bricks[row][col]) {
+    bricks[row][col] = false;
+    breakoutScore++;
+    breakoutBallVY = -breakoutBallVY;
+
+    bool anyLeft = false;
+    for (int r = 0; r < BRICK_ROWS; r++)
+      for (int c = 0; c < BRICK_COLS; c++)
+        if (bricks[r][c]) anyLeft = true;
+
+    if (!anyLeft) {
+      enterGameOver();
+      return;
+    }
+  }
+
+  if (breakoutBallY > SCREEN_HEIGHT) {
+    breakoutLives--;
+
+    if (breakoutLives <= 0) {
+      enterGameOver();
+      return;
+    }
+
+    breakoutBallX = 64;
+    breakoutBallY = 50;
+    breakoutBallVX = random(0, 2) ? 2 : -2;
+    breakoutBallVY = -2;
+  }
+}
+
+void drawBreakout() {
+  display.clearDisplay();
+
+  // Bricks.
+  for (int r = 0; r < BRICK_ROWS; r++) {
+    for (int c = 0; c < BRICK_COLS; c++) {
+      if (bricks[r][c]) {
+        display.fillRect(c * 16, 14 + r * 6, 15, 5, SSD1306_WHITE);
+      }
+    }
+  }
+
+  // Paddle and ball.
+  display.fillRect(breakoutPaddleX, 58, 24, 3, SSD1306_WHITE);
+  display.fillRect(breakoutBallX, breakoutBallY, 3, 3, SSD1306_WHITE);
+
+  display.setCursor(0, 0);
+  display.print("S:");
+  display.print(breakoutScore);
+  display.print(" L:");
+  display.print(breakoutLives);
+
+  display.display();
+}
+
+// =====================================================
 //  MAIN
 // =====================================================
 void setup() {
@@ -733,6 +870,7 @@ void loop() {
       else if (currentGame == GAME_FREE)  { updateFree();  drawFree();  }
       else if (currentGame == GAME_PONG)  { updatePong();  drawPong();  }
       else if (currentGame == GAME_SNAKE) { updateSnake(); drawSnake(); }
+      else if (currentGame == GAME_BREAKOUT) { updateBreakout(); drawBreakout(); }
       break;
 
     case STATE_GAMEOVER:
