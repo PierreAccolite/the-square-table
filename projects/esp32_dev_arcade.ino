@@ -128,6 +128,16 @@ const char* gameNames[GAME_COUNT] = {
 unsigned long lastFrame = 0;
 
 // =====================================================
+//  FORWARD DECLARATIONS
+// =====================================================
+void startGame();
+void enterGameOver();
+int currentScore();
+void recordScore();
+void updateSnake();
+void drawSnake();
+
+// =====================================================
 //  JOYSTICK helpers (wide dead-zone)
 // =====================================================
 bool buttonPressed() {
