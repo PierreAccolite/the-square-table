@@ -446,7 +446,7 @@ void startGame() {
     for (int r=0;r<BRICK_ROWS;r++) for (int col=0;col<BRICK_COLS;col++) bricks[r][col]=true;
   }
   else if (currentGame == GAME_INVADERS) {
-    invaderPlayerX=56; invaderDir=1; invaderStep=0; invaderScore=0; invaderLives=3;
+    invaderPlayerX=56; invaderDir=1; invaderStep=0; invaderOffsetX=0; invaderDrop=0; invaderScore=0; invaderLives=3;
     for(int r=0;r<INV_ROWS;r++) for(int col=0;col<INV_COLS;col++) invaders[r][col]=true;
     for(int i=0;i<INV_MAX_BULLETS;i++) invaderBulletActive[i]=false;
   }
@@ -930,20 +930,26 @@ void updateInvaders(){
     for(int i=0;i<INV_MAX_BULLETS;i++) if(!invaderBulletActive[i]){invaderBulletActive[i]=true;invaderBulletX[i]=invaderPlayerX;invaderBulletY[i]=54;break;}
   }
   invaderStep++;
-  if(invaderStep>=8){ invaderStep=0; bool edge=false; for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col] && ((col*18+12)+(invaderDir*2)>120 || (col*18+12)+(invaderDir*2)<8)) edge=true;
-    if(edge) invaderDir=-invaderDir;
-    else for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col]) { /* visual movement handled by step offset */ }
+  if(invaderStep>=8){
+    invaderStep=0;
+    bool edge=false;
+    for(int r=0;r<INV_ROWS;r++) for(int col=0;col<INV_COLS;col++) if(invaders[r][col]){
+      int ix=10+col*20+invaderOffsetX;
+      if((invaderDir>0 && ix>116)||(invaderDir<0 && ix<12)) edge=true;
+    }
+    if(edge){ invaderDir=-invaderDir; invaderDrop+=3; }
+    else invaderOffsetX+=invaderDir*3;
   }
   for(int i=0;i<INV_MAX_BULLETS;i++) if(invaderBulletActive[i]){
     invaderBulletY[i]-=5; if(invaderBulletY[i]<8){invaderBulletActive[i]=false;continue;}
     for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++) if(invaders[r][col]){
-      int ix=10+col*20+invaderDir*invaderStep/2, iy=12+r*9;
+      int ix=10+col*20+invaderOffsetX, iy=12+r*9+invaderDrop;
       if(abs(invaderBulletX[i]-ix)<7 && abs(invaderBulletY[i]-iy)<5){invaders[r][col]=false;invaderBulletActive[i]=false;invaderScore++;goto invaderHitDone;}
     }
     invaderHitDone:;
   }
   for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col]){
-    int iy=12+r*9+(invaderStep/8)*2;
+    int iy=12+r*9+invaderDrop;
     if(iy>48){enterGameOver();return;}
   }
   bool left=false;for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col])left=true;
@@ -952,7 +958,7 @@ void updateInvaders(){
 void drawInvaders(){
   display.clearDisplay();
   for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col]){
-    int x=10+col*20+invaderDir*invaderStep/2,y=12+r*9;
+    int x=10+col*20+invaderOffsetX,y=12+r*9+invaderDrop;
     display.fillRect(x-6,y-3,12,5,SSD1306_WHITE); display.drawPixel(x-4,y+3,SSD1306_WHITE); display.drawPixel(x+4,y+3,SSD1306_WHITE);
   }
   display.fillRect(invaderPlayerX-6,57,12,3,SSD1306_WHITE);
@@ -965,7 +971,7 @@ void drawInvaders(){
 // =====================================================
 void updateAsteroids(){
   int dx=joyXDir(), dy=joyYDir(); asteroidShipX+=dx*2; asteroidShipY+=dy*2; asteroidShipX=constrain(asteroidShipX,8,120); asteroidShipY=constrain(asteroidShipY,12,56);
-  if(buttonPressed())for(int i=0;i<3;i++)if(!asteroidBulletActive[i]){asteroidBulletActive[i]=true;asteroidBulletX[i]=asteroidShipX;asteroidBulletY[i]=asteroidShipY-5;asteroidBulletVX=0;asteroidBulletVY=-4;break;}
+  if(buttonPressed())for(int i=0;i<3;i++)if(!asteroidBulletActive[i]){asteroidBulletActive[i]=true;asteroidBulletX[i]=asteroidShipX;asteroidBulletY[i]=asteroidShipY-5;asteroidBulletVX[i]=0;asteroidBulletVY[i]=-4;break;}
   for(int i=0;i<6;i++)if(asteroids[i].active){
     asteroids[i].x+=asteroids[i].vx;asteroids[i].y+=asteroids[i].vy;
     if(asteroids[i].x<0)asteroids[i].x=127;if(asteroids[i].x>127)asteroids[i].x=0;
