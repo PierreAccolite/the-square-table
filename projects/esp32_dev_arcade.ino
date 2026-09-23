@@ -1,5 +1,5 @@
 /*
- * LA LINEA MINI GAMES
+ * POCKET ARCADE
  * ESP32 Dev Module
  *
  * Hardware:
@@ -31,13 +31,14 @@
  *   - Non-blocking frame timing foundation
  *   - First additional games: Snake + Breakout
  *
- * Future versions will add more games, Wi-Fi AP/web portal,
- * Android browser support and persistent high scores.
+ * Pocket Arcade Wi-Fi AP + web portal foundation.
  */
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <WiFi.h>
+#include <WebServer.h>
 
 #define OLED_SDA      4
 #define OLED_SCL      15
@@ -51,6 +52,67 @@
 #define JOY_BTN       25
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+const char* AP_SSID = "POCKET_ARCADE";
+const char* AP_PASSWORD = "arcade123";
+WebServer webServer(80);
+
+const char POCKET_ARCADE_PAGE[] PROGMEM = R"rawliteral(
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pocket Arcade</title>
+<style>
+body{margin:0;background:#081013;color:#f1f5f5;font-family:Arial,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:24px 16px}
+.card{background:#102126;border:1px solid #28434a;border-radius:18px;padding:22px}
+h1{margin:0 0 6px;font-size:30px}.status{color:#61e6b0;font-weight:bold}
+.sub{color:#9fb2b7;margin:8px 0 22px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.game{padding:13px;border-radius:12px;background:#172d33;border:1px solid #29484f}
+.num{color:#6f9098;font-size:12px}.name{font-size:16px;margin-top:3px}
+.note{margin-top:20px;color:#8ea5ab;font-size:13px;line-height:1.5}
+</style></head><body><div class="wrap"><div class="card">
+<h1>POCKET ARCADE</h1><div class="status">ESP32 ONLINE</div>
+<div class="sub">12 games &bull; Local Wi-Fi &bull; No internet required</div>
+<div class="grid">
+<div class="game"><div class="num">01</div><div class="name">Dino Jump</div></div>
+<div class="game"><div class="num">02</div><div class="name">Box Climber</div></div>
+<div class="game"><div class="num">03</div><div class="name">Free Walk</div></div>
+<div class="game"><div class="num">04</div><div class="name">Ping Pong</div></div>
+<div class="game"><div class="num">05</div><div class="name">Snake</div></div>
+<div class="game"><div class="num">06</div><div class="name">Breakout</div></div>
+<div class="game"><div class="num">07</div><div class="name">Space Invaders</div></div>
+<div class="game"><div class="num">08</div><div class="name">Asteroids</div></div>
+<div class="game"><div class="num">09</div><div class="name">Flappy</div></div>
+<div class="game"><div class="num">10</div><div class="name">Racing</div></div>
+<div class="game"><div class="num">11</div><div class="name">Memory</div></div>
+<div class="game"><div class="num">12</div><div class="name">Coin Collector</div></div>
+</div>
+<div class="note">Connect your phone, tablet or Android head unit to <b>POCKET_ARCADE</b>, then open <b>http://192.168.4.1</b>. Web game controls are the next layer.</div>
+</div></div></body></html>
+)rawliteral";
+
+void handleRoot() {
+  webServer.send_P(200, "text/html", POCKET_ARCADE_PAGE);
+}
+
+void handleNotFound() {
+  webServer.sendHeader("Location", "/", true);
+  webServer.send(302, "text/plain", "");
+}
+
+void startPocketArcadeWiFi() {
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
+  WiFi.softAP(AP_SSID, AP_PASSWORD);
+  webServer.on("/", handleRoot);
+  webServer.onNotFound(handleNotFound);
+  webServer.begin();
+  Serial.println();
+  Serial.println("=== POCKET ARCADE Wi-Fi ===");
+  Serial.print("SSID: "); Serial.println(AP_SSID);
+  Serial.print("Password: "); Serial.println(AP_PASSWORD);
+  Serial.print("Web: http://"); Serial.println(WiFi.softAPIP());
+}
 
 // -------------------- States --------------------
 enum GameState { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER };
@@ -277,9 +339,9 @@ void drawMenu() {
   display.setTextColor(SSD1306_WHITE);
 
   display.setCursor(12, 0);
-  display.print("LA LINEA GAMES");
+  display.print("POCKET ARCADE");
 
-  display.setCursor(108, 0);
+  display.setCursor(101, 0);
   display.print(menuSelection + 1);
   display.print("/");
   display.print(GAME_COUNT);
@@ -1090,10 +1152,13 @@ void setup() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) while(1) delay(100);
   display.clearDisplay();
   display.display();
+  startPocketArcadeWiFi();
   state = STATE_MENU;
 }
 
 void loop() {
+  webServer.handleClient();
+
   unsigned long now = millis();
 
   if (now - lastFrame < FRAME_TIME_MS)
