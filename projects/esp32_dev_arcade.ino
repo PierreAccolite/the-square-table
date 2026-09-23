@@ -141,6 +141,7 @@ int breakoutLives = 3;
 const int INV_ROWS = 3, INV_COLS = 6, INV_MAX_BULLETS = 3;
 bool invaders[INV_ROWS][INV_COLS];
 int invaderPlayerX = 56, invaderDir = 1, invaderStep = 0;
+int invaderOffsetX = 0, invaderDrop = 0;
 int invaderBulletX[INV_MAX_BULLETS], invaderBulletY[INV_MAX_BULLETS];
 bool invaderBulletActive[INV_MAX_BULLETS];
 int invaderScore = 0, invaderLives = 3;
