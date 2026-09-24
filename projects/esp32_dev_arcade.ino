@@ -449,63 +449,6 @@ void updateMenu() {
 }
 
 
-void drawWiFiStatus() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-
-  display.setCursor(27, 0);
-  display.print("WI-FI PORTAL");
-
-  display.setCursor(4, 13);
-  display.print("Status: ");
-  display.print(wifiPortalEnabled ? "ON" : wifiStatusMessage.c_str());
-
-  display.setCursor(4, 24);
-  display.print("SSID: ");
-  display.print(AP_SSID);
-
-  display.setCursor(4, 35);
-  display.print("IP: ");
-  if (wifiPortalEnabled) display.print(WiFi.softAPIP());
-  else display.print("OFF");
-
-  display.setCursor(4, 46);
-  display.print("Users: ");
-  display.print(wifiPortalEnabled ? WiFi.softAPgetStationNum() : 0);
-
-  display.setCursor(4, 57);
-  display.print(wifiPortalEnabled ? "BTN: Wi-Fi OFF" : "BTN: Wi-Fi ON");
-
-  display.display();
-}
-
-void updateWiFiStatus() {
-  static int lastDir = 0;
-  int dir = joyYDir();
-
-  // Up/down exits the status screen and returns to the menu.
-  if (dir != 0 && lastDir == 0) {
-    state = STATE_MENU;
-    if (menuSelection < menuTop) menuTop = menuSelection;
-    if (menuSelection >= menuTop + MENU_VISIBLE)
-      menuTop = menuSelection - MENU_VISIBLE + 1;
-    lastDir = dir;
-    return;
-  }
-
-  lastDir = dir;
-
-  // Button toggles the AP while staying on this screen.
-  if (buttonPressed()) {
-    if (wifiPortalEnabled) {
-      stopPocketArcadeWiFi();
-    } else {
-      startPocketArcadeWiFi();
-    }
-    showWiFiSerialStatus();
-  }
-}
 
 // =====================================================
 //  GAME OVER
