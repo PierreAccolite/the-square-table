@@ -73,6 +73,12 @@ static const int JOY_X_MAX = 4095;
 static const int JOY_Y_MIN = 0;
 static const int JOY_Y_MAX = 4095;
 
+// Current joystick centre measured from the physical controller.
+// These can be refined after live testing.
+static const int JOY_X_CENTER = 2870;
+static const int JOY_Y_CENTER = 2780;
+static const int JOY_DEADZONE = 8;
+
 unsigned long bootTime = 0;
 unsigned long lastHeartbeat = 0;
 unsigned long lastInputReport = 0;
@@ -93,12 +99,25 @@ int clampInt(int value, int minimum, int maximum) {
   return value;
 }
 
-int normalizeAxis(int value, int minimum, int maximum) {
+int normalizeAxis(int value, int minimum, int maximum, int center) {
   value = clampInt(value, minimum, maximum);
 
-  long result = map(value, minimum, maximum, -100, 100);
+  long result;
 
-  return (int)result;
+  // Map each side independently around the physical centre so that
+  // the joystick rests at approximately 0 instead of +40/+36.
+  if (value >= center) {
+    result = map(value, center, maximum, 0, 100);
+  } else {
+    result = map(value, minimum, center, -100, 0);
+  }
+
+  // Apply a small dead zone around centre to prevent ADC noise/drift.
+  if (abs((int)result) <= JOY_DEADZONE) {
+    return 0;
+  }
+
+  return clampInt((int)result, -100, 100);
 }
 
 void readController() {
@@ -141,8 +160,8 @@ void sendStatus() {
 void sendJoystick() {
   readController();
 
-  int x = normalizeAxis(controller.rawX, JOY_X_MIN, JOY_X_MAX);
-  int y = normalizeAxis(controller.rawY, JOY_Y_MIN, JOY_Y_MAX);
+  int x = normalizeAxis(controller.rawX, JOY_X_MIN, JOY_X_MAX, JOY_X_CENTER);
+  int y = normalizeAxis(controller.rawY, JOY_Y_MIN, JOY_Y_MAX, JOY_Y_CENTER);
 
   Serial.print("JOY,");
   Serial.print(x);
