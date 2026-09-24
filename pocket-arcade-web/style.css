@@ -20,5 +20,7 @@ pre { min-height:180px; max-height:300px; overflow:auto; white-space:pre-wrap; f
 .stick-dot { position:absolute; width:22px; height:22px; border-radius:50%; background:#f2f2f2; left:50%; top:50%; transform:translate(-50%,-50%); box-shadow:0 0 12px rgba(255,255,255,.35); pointer-events:none; }
 .input-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .input-grid button { margin:0; }
-.hint { margin-bottom:0; opacity:.7; font-size:.9rem; }
+.hint { margin-bottom:8px; opacity:.7; font-size:.9rem; }
+.event-readout { font-size:.9rem; opacity:.8; margin-top:8px; }
 #calibrationStatus { margin-top:10px; min-height:1.4em; font-size:.95rem; opacity:.85; }
+body.calibrating .panel { transition:opacity .15s; }
