@@ -1,3 +1,5 @@
+const POCKET_ARCADE_BAUD = 74880;
+
 let port = null;
 let reader = null;
 let writer = null;
@@ -30,8 +32,11 @@ async function connectSerial() {
   try {
     port = await navigator.serial.requestPort();
 
+    // The Pocket Arcade protocol remains unchanged. The USB-UART link
+    // is opened internally at the proven working rate; the user does
+    // not need to select or know the serial rate.
     await port.open({
-      baudRate: 74880,
+      baudRate: POCKET_ARCADE_BAUD,
       dataBits: 8,
       stopBits: 1,
       parity: "none",
@@ -48,6 +53,7 @@ async function connectSerial() {
       " / PID " + (info.usbProductId ?? "—");
 
     log("CONNECTED");
+    log("Pocket Arcade USB serial link ready.");
 
     // Opening the USB serial port can reset an ESP32.
     // Start the reader immediately, then allow boot messages to finish
@@ -109,8 +115,6 @@ async function readLoop() {
           break;
         }
 
-        // A transient framing error can occur around ESP32 reset/boot
-        // traffic. Re-acquire the reader instead of killing the connection.
         await new Promise(resolve => setTimeout(resolve, 100));
         continue;
       }
