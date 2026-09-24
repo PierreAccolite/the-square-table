@@ -244,6 +244,8 @@ const int GRAVITY  = 1;
 struct Spike { int x; bool active; };
 Spike spikes[4];
 int dinoScore = 0, groundScroll = 0;
+int dinoSpeed = 3;
+int dinoCloudX = 92;
 
 // -------------------- Game 2 Boxes (with camera) --------------------
 struct Box { int x, y; bool active; };
@@ -348,7 +350,6 @@ const char* gameNames[MENU_COUNT] = {
   "12. Coin Collector",
   "13. Wi-Fi Portal"
 };
-
 // -------------------- Timing --------------------
 unsigned long lastFrame = 0;
 
@@ -622,7 +623,15 @@ void startGame() {
   state = STATE_PLAYING;
 
   if (currentGame == GAME_DINO) {
-    dinoScore = 0; groundScroll = 0;
+    dinoScore = 0;
+    groundScroll = 0;
+    dinoSpeed = 3;
+    dinoCloudX = 92;
+    manX = 28;
+    manY = 0;
+    manVy = 0;
+    walkFrame = 0;
+    frameCnt = 0;
     for (int i=0; i<4; i++) spikes[i].active = false;
   }
   else if (currentGame == GAME_BOXES) {
@@ -694,52 +703,140 @@ void startGame() {
 }
 
 // =====================================================
-//  GAME 1 – Dino
+//  GAME 1 – Dino Jump (WALL·E inspired)
+//
+//  Controls:
+//    Joystick X = move left/right
+//    Joystick Y UP = jump
+//    Joystick button = jump
 // =====================================================
 void updateDino() {
   int dir = joyXDir();
-  if (dir) { manX += dir*2; facingRight = dir>0; }
-  manX = constrain(manX, 8, 60);
 
-  if ((buttonPressed() || joyYDir()<0) && manY==0) manVy = JUMP_V;
+  if (dir) {
+    manX += dir * 2;
+    facingRight = dir > 0;
+  }
+  manX = constrain(manX, 10, 58);
 
-  manY += manVy; manVy -= GRAVITY;
-  if (manY < 0) { manY=0; manVy=0; }
+  if ((buttonPressed() || joyYDir() < 0) && manY == 0)
+    manVy = JUMP_V;
+
+  manY += manVy;
+  manVy -= GRAVITY;
+  if (manY < 0) {
+    manY = 0;
+    manVy = 0;
+  }
 
   frameCnt++;
-  if (manY==0 && dir && frameCnt%3==0) walkFrame = (walkFrame+1)%4;
+  if (manY == 0 && dir && frameCnt % 3 == 0)
+    walkFrame = (walkFrame + 1) % 4;
 
-  groundScroll = (groundScroll+2)%8;
+  groundScroll = (groundScroll + dinoSpeed) % 8;
 
-  static unsigned long last=0;
-  if (millis()-last > 1400) {
-    for (int i=0;i<4;i++) if (!spikes[i].active) {
-      spikes[i].x = SCREEN_WIDTH+5; spikes[i].active=true; break;
+  dinoCloudX--;
+  if (dinoCloudX < -35)
+    dinoCloudX = SCREEN_WIDTH + random(10, 50);
+
+  static unsigned long lastSpawn = 0;
+  unsigned long spawnInterval = max(650UL, 1250UL - (unsigned long)dinoScore * 18UL);
+
+  if (millis() - lastSpawn > spawnInterval) {
+    for (int i = 0; i < 4; i++) {
+      if (!spikes[i].active) {
+        spikes[i].x = SCREEN_WIDTH + 4;
+        spikes[i].active = true;
+        break;
+      }
     }
-    last = millis();
+    lastSpawn = millis();
   }
 
-  for (int i=0;i<4;i++) if (spikes[i].active) {
-    spikes[i].x -= 3;
-    if (spikes[i].x < manX+6 && spikes[i].x+8 > manX-4 && manY<9) {
+  for (int i = 0; i < 4; i++) {
+    if (!spikes[i].active) continue;
+
+    spikes[i].x -= dinoSpeed;
+
+    if (spikes[i].x < manX + 7 &&
+        spikes[i].x + 8 > manX - 5 &&
+        manY < 10) {
       enterGameOver();
+      return;
     }
-    if (spikes[i].x < -12) { spikes[i].active=false; dinoScore++; }
+
+    if (spikes[i].x < -12) {
+      spikes[i].active = false;
+      dinoScore++;
+
+      if (dinoScore % 5 == 0 && dinoSpeed < 6)
+        dinoSpeed++;
+    }
   }
+}
+
+void drawDinoCharacter(int x, int y, int frame) {
+  int base = GROUND_Y - y;
+  int legA = (frame % 2) ? 2 : -2;
+  int legB = -legA;
+
+  // Body and head.
+  display.fillRect(x - 5, base - 15, 11, 12, SSD1306_WHITE);
+  display.fillRect(x + 2, base - 22, 9, 9, SSD1306_WHITE);
+  display.fillRect(x + 9, base - 19, 5, 4, SSD1306_WHITE);
+
+  // Eye and mouth.
+  display.drawPixel(x + 8, base - 19, SSD1306_BLACK);
+  display.drawPixel(x + 13, base - 16, SSD1306_BLACK);
+
+  // Tail and arm.
+  display.drawLine(x - 5, base - 12, x - 10, base - 9, SSD1306_WHITE);
+  display.drawLine(x - 10, base - 9, x - 13, base - 9, SSD1306_WHITE);
+  display.drawLine(x + 3, base - 11, x + 7, base - 8, SSD1306_WHITE);
+
+  // Legs.
+  display.drawLine(x - 2, base - 3, x - 2 + legA, base, SSD1306_WHITE);
+  display.drawLine(x + 3, base - 3, x + 3 + legB, base, SSD1306_WHITE);
+}
+
+void drawDinoCactus(int x, int variant) {
+  int h = (variant == 0) ? 10 : 13;
+  int trunk = (variant == 0) ? 4 : 5;
+
+  display.fillRect(x, GROUND_Y - h, trunk, h, SSD1306_WHITE);
+  display.fillRect(x - 3, GROUND_Y - h + 4, 3, 4, SSD1306_WHITE);
+  display.fillRect(x + trunk, GROUND_Y - h + 2, 3, 5, SSD1306_WHITE);
+}
+
+void drawDinoCloud(int x, int y) {
+  display.drawCircle(x, y, 4, SSD1306_WHITE);
+  display.drawCircle(x + 5, y - 2, 5, SSD1306_WHITE);
+  display.drawCircle(x + 11, y, 4, SSD1306_WHITE);
+  display.drawLine(x - 2, y + 3, x + 14, y + 3, SSD1306_WHITE);
 }
 
 void drawDino() {
   display.clearDisplay();
-  for (int x=-groundScroll; x<SCREEN_WIDTH; x+=8)
-    display.drawLine(x, GROUND_Y, x+4, GROUND_Y, SSD1306_WHITE);
 
-  for (int i=0;i<4;i++) if (spikes[i].active) {
-    int sx=spikes[i].x;
-    display.drawLine(sx,GROUND_Y, sx+4,GROUND_Y-9, SSD1306_WHITE);
-    display.drawLine(sx+4,GROUND_Y-9, sx+8,GROUND_Y, SSD1306_WHITE);
+  drawDinoCloud(dinoCloudX, 17);
+
+  for (int x = -groundScroll; x < SCREEN_WIDTH; x += 8)
+    display.drawLine(x, GROUND_Y, x + 4, GROUND_Y, SSD1306_WHITE);
+
+  for (int i = 0; i < 4; i++) {
+    if (!spikes[i].active) continue;
+    drawDinoCactus(spikes[i].x, i % 2);
   }
-  drawMan(manX, manY, walkFrame, facingRight);
-  display.setCursor(0,0); display.print("Score:"); display.print(dinoScore);
+
+  drawDinoCharacter(manX, manY, walkFrame);
+
+  display.setCursor(0, 0);
+  display.print("S:");
+  display.print(dinoScore);
+  display.setCursor(90, 0);
+  display.print("x");
+  display.print(dinoSpeed - 2);
+
   display.display();
 }
 
@@ -1098,266 +1195,3 @@ void updateBreakout() {
     if (!anyLeft) {
       enterGameOver();
       return;
-    }
-  }
-
-  if (breakoutBallY > SCREEN_HEIGHT) {
-    breakoutLives--;
-
-    if (breakoutLives <= 0) {
-      enterGameOver();
-      return;
-    }
-
-    breakoutBallX = 64;
-    breakoutBallY = 50;
-    breakoutBallVX = random(0, 2) ? 2 : -2;
-    breakoutBallVY = -2;
-  }
-}
-
-void drawBreakout() {
-  display.clearDisplay();
-
-  // Bricks.
-  for (int r = 0; r < BRICK_ROWS; r++) {
-    for (int c = 0; c < BRICK_COLS; c++) {
-      if (bricks[r][c]) {
-        display.fillRect(c * 16, 14 + r * 6, 15, 5, SSD1306_WHITE);
-      }
-    }
-  }
-
-  // Paddle and ball.
-  display.fillRect(breakoutPaddleX, 58, 24, 3, SSD1306_WHITE);
-  display.fillRect(breakoutBallX, breakoutBallY, 3, 3, SSD1306_WHITE);
-
-  display.setCursor(0, 0);
-  display.print("S:");
-  display.print(breakoutScore);
-  display.print(" L:");
-  display.print(breakoutLives);
-
-  display.display();
-}
-
-// =====================================================
-//  GAME 7 – Space Invaders
-// =====================================================
-void updateInvaders(){
-  int dir=joyXDir(); invaderPlayerX+=dir*3; invaderPlayerX=constrain(invaderPlayerX,4,116);
-  if(buttonPressed()){
-    for(int i=0;i<INV_MAX_BULLETS;i++) if(!invaderBulletActive[i]){invaderBulletActive[i]=true;invaderBulletX[i]=invaderPlayerX;invaderBulletY[i]=54;break;}
-  }
-  invaderStep++;
-  if(invaderStep>=8){
-    invaderStep=0;
-    bool edge=false;
-    for(int r=0;r<INV_ROWS;r++) for(int col=0;col<INV_COLS;col++) if(invaders[r][col]){
-      int ix=10+col*20+invaderOffsetX;
-      if((invaderDir>0 && ix>116)||(invaderDir<0 && ix<12)) edge=true;
-    }
-    if(edge){ invaderDir=-invaderDir; invaderDrop+=3; }
-    else invaderOffsetX+=invaderDir*3;
-  }
-  for(int i=0;i<INV_MAX_BULLETS;i++) if(invaderBulletActive[i]){
-    invaderBulletY[i]-=5;
-    if(invaderBulletY[i]<8){invaderBulletActive[i]=false;continue;}
-
-    bool hit = false;
-    for(int r=0;r<INV_ROWS && !hit;r++) {
-      for(int col=0;col<INV_COLS;col++) {
-        if(!invaders[r][col]) continue;
-        int ix=10+col*20+invaderOffsetX;
-        int iy=12+r*9+invaderDrop;
-        if(abs(invaderBulletX[i]-ix)<7 && abs(invaderBulletY[i]-iy)<5){
-          invaders[r][col]=false;
-          invaderBulletActive[i]=false;
-          invaderScore++;
-          hit = true;
-          break;
-        }
-      }
-    }
-  }
-  for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col]){
-    int iy=12+r*9+invaderDrop;
-    if(iy>48){enterGameOver();return;}
-  }
-  bool left=false;for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col])left=true;
-  if(!left)enterGameOver();
-}
-void drawInvaders(){
-  display.clearDisplay();
-  for(int r=0;r<INV_ROWS;r++)for(int col=0;col<INV_COLS;col++)if(invaders[r][col]){
-    int x=10+col*20+invaderOffsetX,y=12+r*9+invaderDrop;
-    display.fillRect(x-6,y-3,12,5,SSD1306_WHITE); display.drawPixel(x-4,y+3,SSD1306_WHITE); display.drawPixel(x+4,y+3,SSD1306_WHITE);
-  }
-  display.fillRect(invaderPlayerX-6,57,12,3,SSD1306_WHITE);
-  for(int i=0;i<INV_MAX_BULLETS;i++)if(invaderBulletActive[i])display.fillRect(invaderBulletX[i],invaderBulletY[i],2,4,SSD1306_WHITE);
-  display.setCursor(0,0);display.print("S:");display.print(invaderScore);display.print(" L:");display.print(invaderLives);display.display();
-}
-
-// =====================================================
-//  GAME 8 – Asteroids
-// =====================================================
-void updateAsteroids(){
-  int dx=joyXDir(), dy=joyYDir(); asteroidShipX+=dx*2; asteroidShipY+=dy*2; asteroidShipX=constrain(asteroidShipX,8,120); asteroidShipY=constrain(asteroidShipY,12,56);
-  if(buttonPressed())for(int i=0;i<3;i++)if(!asteroidBulletActive[i]){asteroidBulletActive[i]=true;asteroidBulletX[i]=asteroidShipX;asteroidBulletY[i]=asteroidShipY-5;asteroidBulletVX[i]=0;asteroidBulletVY[i]=-4;break;}
-  for(int i=0;i<6;i++)if(asteroids[i].active){
-    asteroids[i].x+=asteroids[i].vx;asteroids[i].y+=asteroids[i].vy;
-    if(asteroids[i].x<0)asteroids[i].x=127;if(asteroids[i].x>127)asteroids[i].x=0;
-    if(asteroids[i].y<8)asteroids[i].y=60;if(asteroids[i].y>60)asteroids[i].y=8;
-    if(abs(asteroids[i].x-asteroidShipX)<6&&abs(asteroids[i].y-asteroidShipY)<6){asteroids[i].x=random(0,128);asteroids[i].y=random(12,45);asteroidLives--;if(asteroidLives<=0){enterGameOver();return;}}
-  }
-  for(int b=0;b<3;b++)if(asteroidBulletActive[b]){
-    asteroidBulletX[b]+=asteroidBulletVX[b];asteroidBulletY[b]+=asteroidBulletVY[b];
-    if(asteroidBulletY[b]<8){asteroidBulletActive[b]=false;continue;}
-    for(int i=0;i<6;i++)if(asteroids[i].active&&abs(asteroidBulletX[b]-asteroids[i].x)<6&&abs(asteroidBulletY[b]-asteroids[i].y)<6){
-      asteroids[i].active=false;asteroidBulletActive[b]=false;asteroidScore++;break;
-    }
-  }
-  bool left=false;for(int i=0;i<6;i++)if(asteroids[i].active)left=true;
-  if(!left){for(int i=0;i<6;i++){asteroids[i].active=true;asteroids[i].x=random(0,128);asteroids[i].y=random(12,45);asteroids[i].vx=random(-2,3);asteroids[i].vy=random(-1,2);} }
-}
-void drawAsteroids(){
-  display.clearDisplay();
-  display.drawCircle(asteroidShipX,asteroidShipY,4,SSD1306_WHITE);display.drawLine(asteroidShipX,asteroidShipY-4,asteroidShipX,asteroidShipY-7,SSD1306_WHITE);
-  for(int i=0;i<6;i++)if(asteroids[i].active)display.drawCircle(asteroids[i].x,asteroids[i].y,asteroids[i].size,SSD1306_WHITE);
-  for(int i=0;i<3;i++)if(asteroidBulletActive[i])display.drawPixel(asteroidBulletX[i],asteroidBulletY[i],SSD1306_WHITE);
-  display.setCursor(0,0);display.print("S:");display.print(asteroidScore);display.print(" L:");display.print(asteroidLives);display.display();
-}
-
-// =====================================================
-//  GAME 9 – Flappy
-// =====================================================
-void updateFlappy(){
-  if(buttonPressed()||joyYDir()<0)flappyV=-5;
-  flappyV+=1;flappyY+=flappyV;
-  flappyPipeX-=2;
-  if(flappyPipeX<-12){flappyPipeX=128;flappyGapY=random(20,45);flappyScore++;}
-  int gapTop=flappyGapY-10,gapBot=flappyGapY+10;
-  if(flappyY<8||flappyY>58||(flappyPipeX<24&&flappyPipeX>8&&(flappyY<gapTop||flappyY>gapBot))){enterGameOver();return;}
-}
-void drawFlappy(){
-  display.clearDisplay();display.fillCircle(18,flappyY,3,SSD1306_WHITE);
-  int gapTop=flappyGapY-10,gapBot=flappyGapY+10;display.fillRect(flappyPipeX,8,10,gapTop-8,SSD1306_WHITE);display.fillRect(flappyPipeX,gapBot,10,60-gapBot,SSD1306_WHITE);
-  display.setCursor(0,0);display.print("S:");display.print(flappyScore);display.display();
-}
-
-// =====================================================
-//  GAME 10 – Racing
-// =====================================================
-void updateRacing(){
-  int dir=joyXDir();raceCarX+=dir*3;raceCarX=constrain(raceCarX,43,85);raceRoadOffset=(raceRoadOffset+raceSpeed)%10;
-  for(int i=0;i<4;i++){raceObstacles[i].y+=raceSpeed;if(raceObstacles[i].y>64){raceObstacles[i].y=-random(15,45);raceObstacles[i].x=random(45,82);raceScore++;if(raceScore%8==0&&raceSpeed<5)raceSpeed++;}if(raceObstacles[i].y>50&&raceObstacles[i].y<62&&abs(raceObstacles[i].x-raceCarX)<8){enterGameOver();return;}}
-}
-void drawRacing(){
-  display.clearDisplay();display.drawLine(40,0,40,63,SSD1306_WHITE);display.drawLine(88,0,88,63,SSD1306_WHITE);
-  for(int y=-10;y<64;y+=10)display.drawLine(63,y+raceRoadOffset,63,y+5+raceRoadOffset,SSD1306_WHITE);
-  display.fillRect(raceCarX-5,54,10,8,SSD1306_WHITE);for(int i=0;i<4;i++)display.fillRect(raceObstacles[i].x-4,raceObstacles[i].y,8,7,SSD1306_WHITE);
-  display.setCursor(0,0);display.print("S:");display.print(raceScore);display.display();
-}
-
-// =====================================================
-//  GAME 11 – Memory
-// =====================================================
-void updateMemory(){
-  if(millis()<memoryPauseUntil)return;
-  int x=joyXDir(), y=joyYDir();
-  if(x||y){int old=memoryCursor;if(x>0)memoryCursor++;if(x<0)memoryCursor--;if(y>0)memoryCursor+=4;if(y<0)memoryCursor-=4;memoryCursor=constrain(memoryCursor,0,7);if(memoryCursor!=old)delay(90);}
-  if(buttonPressed()&&!memoryFound[memoryCursor]){
-    if(memoryFirst<0)memoryFirst=memoryCursor;
-    else if(memorySecond<0&&memoryCursor!=memoryFirst){memorySecond=memoryCursor;memoryPauseUntil=millis()+600;}
-  }
-  if(memorySecond>=0&&millis()>=memoryPauseUntil){
-    if(memoryCards[memoryFirst]==memoryCards[memorySecond]){memoryFound[memoryFirst]=true;memoryFound[memorySecond]=true;memoryScore++;}
-    memoryFirst=-1;memorySecond=-1;
-    bool done=true;for(int i=0;i<8;i++)if(!memoryFound[i])done=false;if(done)enterGameOver();
-  }
-}
-void drawMemory(){
-  display.clearDisplay();
-  for(int i=0;i<8;i++){int x=8+(i%4)*30,y=12+(i/4)*22;if(memoryFound[i]){display.fillRect(x,y,20,16,SSD1306_WHITE);display.setTextColor(SSD1306_BLACK);display.setCursor(x+7,y+4);display.print(memoryCards[i]+1);display.setTextColor(SSD1306_WHITE);}else if(i==memoryFirst||i==memorySecond){display.drawRect(x,y,20,16,SSD1306_WHITE);display.setCursor(x+7,y+4);display.print(memoryCards[i]+1);}else display.drawRect(x,y,20,16,SSD1306_WHITE);if(i==memoryCursor)display.drawRect(x-2,y-2,24,20,SSD1306_WHITE);}
-  display.setCursor(0,0);display.print("Pairs:");display.print(memoryScore);display.display();
-}
-
-// =====================================================
-//  GAME 12 – Coin Collector
-// =====================================================
-void updateCoins(){
-  int dx=joyXDir(),dy=joyYDir();coinPlayerX+=dx*3;coinPlayerY+=dy*3;coinPlayerX=constrain(coinPlayerX,5,123);coinPlayerY=constrain(coinPlayerY,12,59);
-  for(int i=0;i<8;i++)if(coinsActive[i]&&abs(coinPlayerX-coinsX[i])<6&&abs(coinPlayerY-coinsY[i])<6){coinsActive[i]=false;coinScore++;}
-  bool left=false;for(int i=0;i<8;i++)if(coinsActive[i])left=true;
-  if(!left)enterGameOver();
-}
-void drawCoins(){
-  display.clearDisplay();display.drawRect(2,10,124,53,SSD1306_WHITE);display.fillRect(coinPlayerX-3,coinPlayerY-3,6,6,SSD1306_WHITE);
-  for(int i=0;i<8;i++)if(coinsActive[i])display.drawCircle(coinsX[i],coinsY[i],3,SSD1306_WHITE);
-  display.setCursor(0,0);display.print("Coins:");display.print(coinScore);display.display();
-}
-
-// =====================================================
-//  MAIN
-// =====================================================
-void setup() {
-  Serial.begin(115200);
-  pinMode(JOY_BTN, INPUT_PULLUP);
-  Wire.begin(OLED_SDA, OLED_SCL);
-  randomSeed(micros());
-
-  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) while(1) delay(100);
-  display.clearDisplay();
-  display.display();
-  webServer.on("/", handleRoot);
-  webServer.onNotFound(handleNotFound);
-
-  // Wi-Fi starts enabled so the portal is available immediately.
-  startPocketArcadeWiFi();
-
-  state = STATE_MENU;
-}
-
-void loop() {
-  if (wifiPortalEnabled)
-    webServer.handleClient();
-
-  unsigned long now = millis();
-
-  if (now - lastFrame < FRAME_TIME_MS)
-    return;
-
-  lastFrame = now;
-
-  switch (state) {
-    case STATE_MENU:
-      updateMenu();
-      drawMenu();
-      break;
-
-    case STATE_PLAYING:
-      if      (currentGame == GAME_DINO)  { updateDino();  drawDino();  }
-      else if (currentGame == GAME_BOXES) { updateBoxes(); drawBoxes(); }
-      else if (currentGame == GAME_FREE)  { updateFree();  drawFree();  }
-      else if (currentGame == GAME_PONG)  { updatePong();  drawPong();  }
-      else if (currentGame == GAME_SNAKE) { updateSnake(); drawSnake(); }
-      else if (currentGame == GAME_BREAKOUT) { updateBreakout(); drawBreakout(); }
-      else if (currentGame == GAME_INVADERS) { updateInvaders(); drawInvaders(); }
-      else if (currentGame == GAME_ASTEROIDS) { updateAsteroids(); drawAsteroids(); }
-      else if (currentGame == GAME_FLAPPY) { updateFlappy(); drawFlappy(); }
-      else if (currentGame == GAME_RACING) { updateRacing(); drawRacing(); }
-      else if (currentGame == GAME_MEMORY) { updateMemory(); drawMemory(); }
-      else if (currentGame == GAME_COINS) { updateCoins(); drawCoins(); }
-      break;
-
-    case STATE_GAMEOVER:
-      updateGameOver();
-      drawGameOver();
-      break;
-
-    case STATE_WIFI:
-      updateWiFiStatus();
-      drawWiFiStatus();
-      break;
-  }
-}
