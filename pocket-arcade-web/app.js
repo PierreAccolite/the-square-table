@@ -48,10 +48,19 @@ async function connectSerial() {
       " / PID " + (info.usbProductId ?? "—");
 
     log("CONNECTED");
-    await sendLine("PING");
 
+    // Opening the USB serial port can reset an ESP32.
+    // Start the reader immediately, then allow boot messages to finish
+    // before sending our first command.
     keepReading = true;
     readLoop();
+
+    log("Waiting 2 seconds for ESP32 boot...");
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    if (keepReading && writer) {
+      await sendLine("PING");
+    }
   } catch (err) {
     log("CONNECT ERROR: " + err);
     setConnected(false);
