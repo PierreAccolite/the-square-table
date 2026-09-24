@@ -70,28 +70,59 @@ async function connectSerial() {
 async function readLoop() {
   if (!port || !port.readable) return;
 
-  reader = port.readable.getReader();
+  let framingRetries = 0;
 
-  try {
-    while (keepReading) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (!value) continue;
+  while (keepReading && port && port.readable) {
+    reader = port.readable.getReader();
 
-      receiveBuffer += new TextDecoder().decode(value);
+    try {
+      while (keepReading) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value) continue;
 
-      let newline;
-      while ((newline = receiveBuffer.indexOf("\n")) >= 0) {
-        const line = receiveBuffer.slice(0, newline).replace(/\r$/, "");
-        receiveBuffer = receiveBuffer.slice(newline + 1);
-        handleLine(line);
+        receiveBuffer += new TextDecoder().decode(value);
+
+        let newline;
+        while ((newline = receiveBuffer.indexOf("\n")) >= 0) {
+          const line = receiveBuffer.slice(0, newline).replace(/\r$/, "");
+          receiveBuffer = receiveBuffer.slice(newline + 1);
+          handleLine(line);
+        }
+      }
+
+      framingRetries = 0;
+      break;
+    } catch (err) {
+      const message = String(err);
+
+      if (message.includes("FramingError") || message.toLowerCase().includes("framing error")) {
+        framingRetries++;
+
+        log("SERIAL FRAMING ERROR - retry " + framingRetries + "/5");
+
+        try { reader.releaseLock(); } catch (_) {}
+        reader = null;
+
+        if (framingRetries >= 5 || !keepReading) {
+          log("READ STOPPED: repeated framing errors.");
+          break;
+        }
+
+        // A transient framing error can occur around ESP32 reset/boot
+        // traffic. Re-acquire the reader instead of killing the connection.
+        await new Promise(resolve => setTimeout(resolve, 100));
+        continue;
+      }
+
+      log("READ ERROR: " + message);
+      break;
+    } finally {
+      if (reader) {
+        try { reader.releaseLock(); } catch (_) {}
+        reader = null;
       }
     }
-  } catch (err) {
-    log("READ ERROR: " + err);
-  } finally {
-    try { reader.releaseLock(); } catch (_) {}
-    reader = null;
   }
 }
 
