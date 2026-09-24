@@ -1195,3 +1195,6 @@ void updateBreakout() {
     if (!anyLeft) {
       enterGameOver();
       return;
+    }
+  }
+}
