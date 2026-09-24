@@ -31,7 +31,7 @@ async function connectSerial() {
     port = await navigator.serial.requestPort();
 
     await port.open({
-      baudRate: 115200,
+      baudRate: 74880,
       dataBits: 8,
       stopBits: 1,
       parity: "none",
