@@ -7,6 +7,7 @@ static const int JOY_BTN_PIN = 25;
 static const uint32_t USB_BAUD = 115200;
 static const uint32_t HEARTBEAT_MS = 2000;
 static const uint32_t INPUT_REPORT_MS = 50;
+static const uint32_t BUTTON_DEBOUNCE_MS = 30;
 
 static const int DEFAULT_X_MIN = 0;
 static const int DEFAULT_X_MAX = 4095;
@@ -22,10 +23,22 @@ int joyXCenter=DEFAULT_X_CENTER, joyYCenter=DEFAULT_Y_CENTER;
 
 Preferences preferences;
 unsigned long bootTime=0, lastHeartbeat=0, lastInputReport=0;
+
 bool inputStreaming=false;
 
 struct ControllerState { int rawX; int rawY; bool button; };
 ControllerState controller={0,0,false};
+bool lastButtonState=false;
+unsigned long lastButtonChange=0;
+
+enum CalibrationState { CAL_IDLE, CAL_CENTER, CAL_RANGE };
+CalibrationState calibrationState=CAL_IDLE;
+unsigned long calibrationStarted=0;
+unsigned long calibrationNextProgress=0;
+long centerXTotal=0, centerYTotal=0;
+uint16_t centerSamples=0;
+int newXMin=4095, newXMax=0, newYMin=4095, newYMax=0;
+int newXCenter=0, newYCenter=0;
 
 int clampInt(int value,int minimum,int maximum){
   if(value<minimum)return minimum;
@@ -95,6 +108,15 @@ void sendInputEvent(const char* eventName){
   Serial.print("EVENT,"); Serial.println(eventName);
 }
 
+void updateButton(){
+  bool current=digitalRead(JOY_BTN_PIN)==LOW;
+  if(current!=lastButtonState && millis()-lastButtonChange>=BUTTON_DEBOUNCE_MS){
+    lastButtonState=current;
+    lastButtonChange=millis();
+    sendInputEvent(current?"BUTTON_DOWN":"BUTTON_UP");
+  }
+}
+
 void sendStatus(){
   readController();
   Serial.print("STATUS,chip="); Serial.print(ESP.getChipModel());
@@ -108,29 +130,27 @@ void sendStatus(){
   Serial.print(":"); Serial.print(joyYMax); Serial.print(":"); Serial.println(joyYCenter);
 }
 
-void runCalibration(){
-  inputStreaming=false;
-  Serial.println("CAL,START");
-  Serial.println("CAL,CENTER,KEEP_STICK_CENTERED");
-
-  long xTotal=0,yTotal=0;
-  for(int i=0;i<100;i++){ xTotal+=analogRead(JOY_X_PIN); yTotal+=analogRead(JOY_Y_PIN); delay(10); }
-  int newXCenter=xTotal/100, newYCenter=yTotal/100;
-
-  Serial.print("CAL,CENTER_CAPTURED,"); Serial.print(newXCenter); Serial.print(","); Serial.println(newYCenter);
-  Serial.println("CAL,RANGE,MOVE_STICK_FULL_RANGE");
-
-  int newXMin=4095,newXMax=0,newYMin=4095,newYMax=0;
-  unsigned long rangeStart=millis();
-  while(millis()-rangeStart<6000UL){
-    int x=analogRead(JOY_X_PIN),y=analogRead(JOY_Y_PIN);
-    if(x<newXMin)newXMin=x; if(x>newXMax)newXMax=x;
-    if(y<newYMin)newYMin=y; if(y>newYMax)newYMax=y;
-    delay(10);
+void startCalibration(){
+  if(calibrationState!=CAL_IDLE){
+    Serial.println("CAL,ERROR,ALREADY_RUNNING");
+    return;
   }
 
+  inputStreaming=false;
+  calibrationState=CAL_CENTER;
+  calibrationStarted=millis();
+  calibrationNextProgress=calibrationStarted;
+  centerXTotal=0; centerYTotal=0; centerSamples=0;
+  newXMin=4095; newXMax=0; newYMin=4095; newYMax=0;
+
+  Serial.println("CAL,START");
+  Serial.println("CAL,CENTER,KEEP_STICK_CENTERED");
+}
+
+void finishCalibration(){
   if(newXMax-newXMin<200 || newYMax-newYMin<200){
     Serial.println("CAL,ERROR,NOT_ENOUGH_RANGE");
+    calibrationState=CAL_IDLE;
     return;
   }
 
@@ -142,11 +162,57 @@ void runCalibration(){
   Serial.print(joyXMax); Serial.print(":"); Serial.print(joyXCenter);
   Serial.print(",Y="); Serial.print(joyYMin); Serial.print(":");
   Serial.print(joyYMax); Serial.print(":"); Serial.println(joyYCenter);
+
+  calibrationState=CAL_IDLE;
+}
+
+void serviceCalibration(){
+  if(calibrationState==CAL_IDLE)return;
+
+  unsigned long now=millis();
+
+  if(calibrationState==CAL_CENTER){
+    int x=analogRead(JOY_X_PIN), y=analogRead(JOY_Y_PIN);
+    centerXTotal+=x; centerYTotal+=y; centerSamples++;
+
+    if(now-calibrationStarted>=1000UL){
+      newXCenter=centerSamples?centerXTotal/centerSamples:analogRead(JOY_X_PIN);
+      newYCenter=centerSamples?centerYTotal/centerSamples:analogRead(JOY_Y_PIN);
+      Serial.print("CAL,CENTER_CAPTURED,"); Serial.print(newXCenter);
+      Serial.print(","); Serial.println(newYCenter);
+      Serial.println("CAL,RANGE,MOVE_STICK_FULL_RANGE");
+      calibrationState=CAL_RANGE;
+      calibrationStarted=now;
+      calibrationNextProgress=now;
+      return;
+    }
+  }
+
+  if(calibrationState==CAL_RANGE){
+    int x=analogRead(JOY_X_PIN), y=analogRead(JOY_Y_PIN);
+    if(x<newXMin)newXMin=x; if(x>newXMax)newXMax=x;
+    if(y<newYMin)newYMin=y; if(y>newYMax)newYMax=y;
+
+    if(now>=calibrationNextProgress){
+      unsigned long elapsed=now-calibrationStarted;
+      int remaining=(elapsed<6000UL)?(int)((6000UL-elapsed+999UL)/1000UL):0;
+      Serial.print("CAL,PROGRESS,"); Serial.println(remaining);
+      calibrationNextProgress=now+1000UL;
+    }
+
+    if(now-calibrationStarted>=6000UL) finishCalibration();
+  }
 }
 
 void handleCommand(String command){
   command.trim(); if(!command.length())return;
   String upper=command; upper.toUpperCase();
+
+  if(calibrationState!=CAL_IDLE && upper!="STATUS" && upper!="JOYRAW" && upper!="PING"){
+    if(upper=="CALIBRATE") Serial.println("CAL,ERROR,ALREADY_RUNNING");
+    else Serial.println("ERROR,CALIBRATION_IN_PROGRESS");
+    return;
+  }
 
   if(upper=="PING") Serial.println("PONG");
   else if(upper=="STATUS") sendStatus();
@@ -154,7 +220,7 @@ void handleCommand(String command){
   else if(upper=="JOYRAW") sendRawJoystick();
   else if(upper=="INPUT"){ inputStreaming=true; Serial.println("INPUT,STREAM,ON"); }
   else if(upper=="INPUT OFF"){ inputStreaming=false; Serial.println("INPUT,STREAM,OFF"); }
-  else if(upper=="CALIBRATE") runCalibration();
+  else if(upper=="CALIBRATE") startCalibration();
   else if(upper=="START") sendInputEvent("START");
   else if(upper=="SELECT") sendInputEvent("SELECT");
   else if(upper=="MENU") sendInputEvent("MENU");
@@ -170,6 +236,10 @@ void setup(){
   Serial.begin(USB_BAUD);
   delay(500);
   bootTime=millis();
+
+  readController();
+  lastButtonState=controller.button;
+  lastButtonChange=millis();
 
   Serial.println();
   Serial.println("========================================");
@@ -188,13 +258,20 @@ void setup(){
 
 void loop(){
   if(Serial.available()) handleCommand(Serial.readStringUntil('\n'));
-  if(inputStreaming && millis()-lastInputReport>=INPUT_REPORT_MS){
-    lastInputReport=millis(); sendJoystick();
+
+  serviceCalibration();
+  updateButton();
+
+  if(inputStreaming && calibrationState==CAL_IDLE && millis()-lastInputReport>=INPUT_REPORT_MS){
+    lastInputReport=millis();
+    sendJoystick();
   }
+
   if(millis()-lastHeartbeat>=HEARTBEAT_MS){
     lastHeartbeat=millis();
     Serial.print("HEARTBEAT,uptime="); Serial.print((millis()-bootTime)/1000UL);
     Serial.print(",heap="); Serial.println(ESP.getFreeHeap());
   }
+
   delay(2);
 }
