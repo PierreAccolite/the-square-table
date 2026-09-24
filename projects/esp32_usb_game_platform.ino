@@ -62,7 +62,7 @@ static const int JOY_X_PIN = 32;
 static const int JOY_Y_PIN = 33;
 static const int JOY_BTN_PIN = 25;
 
-static const uint32_t USB_BAUD = 115200;
+static const uint32_t USB_BAUD = 74880;
 static const uint32_t HEARTBEAT_MS = 2000;
 static const uint32_t INPUT_REPORT_MS = 50;
 
