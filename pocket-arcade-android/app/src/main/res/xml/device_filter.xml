@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Generic USB serial device filter.
+         usb-serial-for-android probes CDC/ACM, FTDI, CP210x, CH340/CH341,
+         Prolific and other supported USB serial bridges at runtime. -->
+</resources>
