@@ -1,62 +1,115 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pocket Arcade</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#020609">
+  <title>Pocket Arcade</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main>
-<h1>POCKET ARCADE</h1>
-<h2>USB GAME INPUT</h2>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="logo">POCKET<span>//</span>ARCADE</div>
+        <div class="tagline">USB EDITION · LOCAL CANVAS ENGINE</div>
+      </div>
+      <div class="connection">
+        <span id="statusDot" class="dot"></span>
+        <span id="status">USB DISCONNECTED</span>
+      </div>
+    </header>
 
-<section class="panel">
-<button id="connect">CONNECT ESP32</button>
-<button id="disconnect" disabled>DISCONNECT</button>
-<div id="status">Status: Disconnected</div>
-<div id="device">Device: —</div>
-</section>
+    <section class="cabinet">
+      <div class="screen-bezel">
+        <div class="screen">
+          <canvas id="game" width="960" height="540"></canvas>
+          <div class="scanlines"></div>
+          <div class="screen-glow"></div>
+          <div class="screen-vignette"></div>
+        </div>
+      </div>
 
-<section class="panel">
-<h3>Game Input</h3>
-<div class="input-grid">
-<button id="menu" disabled>MENU</button>
-<button id="back" disabled>BACK</button>
-<button id="select" disabled>SELECT</button>
-<button id="start" disabled>START</button>
-</div>
-<p class="hint">Keyboard: Enter = Start · Space = Select · M = Menu · Esc = Back</p>
-<div class="event-readout">Last event: <span id="lastEvent">—</span></div>
-</section>
+      <div class="hud">
+        <div><span class="label">GAME</span><strong id="gameName">DINO JUMP</strong></div>
+        <div><span class="label">SCORE</span><strong id="score">000000</strong></div>
+        <div><span class="label">LINK</span><strong id="linkState">LOCAL</strong></div>
+      </div>
 
-<section class="panel readings">
-<h3>Joystick</h3>
-<div>X: <span id="joyX">—</span></div>
-<div>Y: <span id="joyY">—</span></div>
-<div>Button: <span id="joyBtn">—</span></div>
-<div class="stick-wrap"><div class="stick" id="stick"><div class="stick-dot" id="stickDot"></div></div></div>
-<button id="streamOn" disabled>START INPUT STREAM</button>
-<button id="streamOff" disabled>STOP INPUT STREAM</button>
-</section>
+      <div class="physical-controls">
+        <div class="joystick-wrap">
+          <div class="joystick" id="stick">
+            <div class="joystick-ring"></div>
+            <div class="joystick-knob" id="knob"></div>
+          </div>
+          <div class="control-caption">JOYSTICK</div>
+        </div>
 
-<section class="panel">
-<h3>Joystick Calibration</h3>
-<p id="calibrationText">The current calibration is stored in the ESP32.</p>
-<button id="calibrate" disabled>CALIBRATE JOYSTICK</button>
-<div id="calibrationStatus"></div>
-</section>
+        <div class="machine-buttons">
+          <button class="round-btn red" id="aBtn">A</button>
+          <button class="round-btn gold" id="bBtn">B</button>
+          <div class="aux-buttons">
+            <button class="pill" id="startBtn">START</button>
+            <button class="pill" id="selectBtn">SELECT</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-<section class="panel">
-<h3>Connection Test</h3>
-<button id="ping" disabled>PING</button>
-</section>
+    <aside class="side">
+      <section class="panel connection-panel">
+        <div class="panel-title">POCKET LINK</div>
+        <div class="connection-actions">
+          <button id="connect" class="primary">CONNECT ESP32</button>
+          <button id="disconnect" disabled>DISCONNECT</button>
+        </div>
+        <div id="device" class="device">No serial device selected</div>
+        <div class="baud">74880 BAUD · USB SERIAL</div>
+      </section>
 
-<section class="panel">
-<h3>Console</h3>
-<pre id="console"></pre>
-</section>
-</main>
-<script src="app.js"></script>
+      <section class="panel">
+        <div class="panel-title">SELECT GAME</div>
+        <div id="games" class="games"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">CONTROLS</div>
+        <div class="control-help">
+          <div><kbd>↑ ↓ ← →</kbd> Move</div>
+          <div><kbd>Z</kbd> / <kbd>A</kbd> Action</div>
+          <div><kbd>X</kbd> / <kbd>B</kbd> Secondary</div>
+          <div><kbd>ENTER</kbd> Start</div>
+          <div><kbd>SPACE</kbd> Select</div>
+          <div><kbd>M</kbd> Menu</div>
+          <div><kbd>ESC</kbd> Back</div>
+        </div>
+      </section>
+
+      <section class="panel telemetry">
+        <div class="panel-title">TELEMETRY</div>
+        <div class="telemetry-grid">
+          <span>X</span><b id="joyX">0</b>
+          <span>Y</span><b id="joyY">0</b>
+          <span>BTN</span><b id="joyBtn">0</b>
+        </div>
+        <div class="mini-stick"><div id="miniDot"></div></div>
+      </section>
+
+      <section class="panel console-panel">
+        <div class="panel-title">SERIAL</div>
+        <pre id="console"></pre>
+      </section>
+    </aside>
+  </main>
+
+  <footer>
+    <span>THE SQUARE TABLE</span>
+    <span>·</span>
+    <span>ESP32 + OLED + JOYSTICK</span>
+    <span>·</span>
+    <span>NO WI-FI · NO BLUETOOTH</span>
+  </footer>
+
+  <script src="app.js"></script>
 </body>
 </html>
