@@ -8,7 +8,7 @@ Use:
 
 projects/esp32_usb_game_platform.ino
 
-The ESP32 uses 115200 baud, 8-N-1.
+The ESP32 uses 74880 baud, 8-N-1 for the current Pocket Arcade USB platform.
 
 ## Test
 
@@ -16,7 +16,7 @@ Open index.html from a browser that supports Web Serial.
 
 Press CONNECT ESP32 and select the ESP32 USB serial device.
 
-The page sends PING automatically and should receive:
+The page sends PING automatically at 74880 baud and should receive:
 
 PONG
 
