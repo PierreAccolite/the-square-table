@@ -130,10 +130,8 @@ void printMemoryInventory() {
   Serial.print(ESP.getFlashChipSize() / 1024);
   Serial.println(" KB");
 
-  Serial.print("Flash real size:    ");
-  Serial.print(ESP.getFlashChipRealSize() / 1024);
-  Serial.println(" KB");
-
+  // getFlashChipRealSize() is not available in some Arduino-ESP32
+  // core versions, so use the supported flash-size API here.
   Serial.print("Flash speed:        ");
   Serial.print(ESP.getFlashChipSpeed() / 1000000);
   Serial.println(" MHz");
