@@ -87,7 +87,11 @@ public class MainActivity extends Activity implements SerialInputOutputManager.L
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
 
-        registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(usbReceiver, filter);
+        }
 
         scanAndConnect();
     }
