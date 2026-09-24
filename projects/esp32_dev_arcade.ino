@@ -348,6 +348,10 @@ int joyYDir() {
 // =====================================================
 //  DRAW MAN
 // =====================================================
+bool buttonPressed();
+int joyXDir();
+int joyYDir();
+
 void drawMan(int x, int y, int frame, bool right) {
   int by = GROUND_Y - (y - cameraY);
 
