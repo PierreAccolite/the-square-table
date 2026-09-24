@@ -137,6 +137,7 @@ function handleLine(line) {
       $("joyX").textContent = parts[1];
       $("joyY").textContent = parts[2];
       $("joyBtn").textContent = parts[3];
+      updateStick(Number(parts[1]), Number(parts[2]));
     }
   }
 
@@ -146,8 +147,24 @@ function handleLine(line) {
       $("joyX").textContent = parts[1] + " raw";
       $("joyY").textContent = parts[2] + " raw";
       $("joyBtn").textContent = parts[3];
+      updateStick(Number(parts[1]), Number(parts[2]));
     }
   }
+}
+
+function updateStick(x, y) {
+  const dot = $("stickDot");
+  if (!dot || !Number.isFinite(x) || !Number.isFinite(y)) return;
+
+  const clampedX = Math.max(-100, Math.min(100, x));
+  const clampedY = Math.max(-100, Math.min(100, y));
+
+  // Screen Y is inverted: joystick +Y moves the dot upward.
+  const left = 50 + clampedX * 0.42;
+  const top = 50 - clampedY * 0.42;
+
+  dot.style.left = left + "%";
+  dot.style.top = top + "%";
 }
 
 async function sendLine(line) {
