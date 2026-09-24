@@ -38,115 +38,6 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-// USB Serial bridge for the local Pocket Arcade webpage.
-// The browser uses Web Serial at 74880 baud. Wi-Fi and Bluetooth are not used.
-static bool serialInputStream = false;
-static bool serialLastButton = false;
-static bool virtualButtonPulse = false;
-
-void sendSerialJoystick() {
-  int x = joyXDir() * 100;
-  int y = joyYDir() * 100;
-  bool button = digitalRead(JOY_BTN) == LOW;
-  Serial.print("JOY,");
-  Serial.print(x);
-  Serial.print(",");
-  Serial.print(y);
-  Serial.print(",");
-  Serial.println(button ? 1 : 0);
-
-  if (button != serialLastButton) {
-    Serial.print("EVENT,BUTTON_");
-    Serial.println(button ? "DOWN" : "UP");
-    serialLastButton = button;
-  }
-}
-
-void processSerialCommand(const String& command) {
-  String cmd = command;
-  cmd.trim();
-  if (!cmd.length()) return;
-
-  if (cmd == "PING") {
-    Serial.println("PONG");
-    return;
-  }
-
-  if (cmd == "INPUT") {
-    serialInputStream = true;
-    Serial.println("INPUT,ON");
-    return;
-  }
-
-  if (cmd == "INPUT OFF") {
-    serialInputStream = false;
-    Serial.println("INPUT,OFF");
-    return;
-  }
-
-  if (cmd == "START") {
-    if (state == STATE_GAMEOVER) {
-      startGame();
-    } else if (state == STATE_MENU) {
-      startGame();
-    }
-    return;
-  }
-
-  if (cmd == "MENU" || cmd == "BACK") {
-    state = STATE_MENU;
-    return;
-  }
-
-  if (cmd == "SELECT") {
-    if (state == STATE_MENU) {
-      menuSelection++;
-      if (menuSelection >= MENU_COUNT) menuSelection = 0;
-      menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, MENU_COUNT - MENU_VISIBLE));
-    }
-    return;
-  }
-
-  if (cmd.startsWith("GAME,")) {
-    int n = cmd.substring(5).toInt();
-    if (n >= 0 && n < GAME_COUNT) {
-      currentGame = (GameType)n;
-      menuSelection = n;
-      menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, MENU_COUNT - MENU_VISIBLE));
-      Serial.print("GAME,");
-      Serial.println(n);
-    }
-    return;
-  }
-
-  if (cmd == "BTN,1") {
-    virtualButtonPulse = true;
-    return;
-  }
-}
-
-void serviceSerial() {
-  static String inputLine;
-  while (Serial.available()) {
-    char ch = (char)Serial.read();
-    if (ch == '\n' || ch == '\r') {
-      if (inputLine.length()) processSerialCommand(inputLine);
-      inputLine = "";
-    } else if (inputLine.length() < 80) {
-      inputLine += ch;
-    }
-  }
-
-  if (serialInputStream) {
-    static unsigned long lastSerialInput = 0;
-    unsigned long now = millis();
-    if (now - lastSerialInput >= 50) {
-      lastSerialInput = now;
-      sendSerialJoystick();
-    }
-  }
-}
-
 // -------------------- States --------------------
 enum GameState { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER, STATE_WIFI };
 enum GameType  {
@@ -312,6 +203,116 @@ void updateFlappy(); void drawFlappy();
 void updateRacing(); void drawRacing();
 void updateMemory(); void drawMemory();
 void updateCoins(); void drawCoins();
+
+// USB Serial bridge for the local Pocket Arcade webpage.
+// The browser uses Web Serial at 74880 baud. Wi-Fi and Bluetooth are not used.
+static bool serialInputStream = false;
+static bool serialLastButton = false;
+static bool virtualButtonPulse = false;
+
+void sendSerialJoystick() {
+  int x = joyXDir() * 100;
+  int y = joyYDir() * 100;
+  bool button = digitalRead(JOY_BTN) == LOW;
+  Serial.print("JOY,");
+  Serial.print(x);
+  Serial.print(",");
+  Serial.print(y);
+  Serial.print(",");
+  Serial.println(button ? 1 : 0);
+
+  if (button != serialLastButton) {
+    Serial.print("EVENT,BUTTON_");
+    Serial.println(button ? "DOWN" : "UP");
+    serialLastButton = button;
+  }
+}
+
+void processSerialCommand(const String& command) {
+  String cmd = command;
+  cmd.trim();
+  if (!cmd.length()) return;
+
+  if (cmd == "PING") {
+    Serial.println("PONG");
+    return;
+  }
+
+  if (cmd == "INPUT") {
+    serialInputStream = true;
+    Serial.println("INPUT,ON");
+    return;
+  }
+
+  if (cmd == "INPUT OFF") {
+    serialInputStream = false;
+    Serial.println("INPUT,OFF");
+    return;
+  }
+
+  if (cmd == "START") {
+    if (state == STATE_GAMEOVER) {
+      startGame();
+    } else if (state == STATE_MENU) {
+      startGame();
+    }
+    return;
+  }
+
+  if (cmd == "MENU" || cmd == "BACK") {
+    state = STATE_MENU;
+    return;
+  }
+
+  if (cmd == "SELECT") {
+    if (state == STATE_MENU) {
+      menuSelection++;
+      if (menuSelection >= MENU_COUNT) menuSelection = 0;
+      menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, MENU_COUNT - MENU_VISIBLE));
+    }
+    return;
+  }
+
+  if (cmd.startsWith("GAME,")) {
+    int n = cmd.substring(5).toInt();
+    if (n >= 0 && n < GAME_COUNT) {
+      currentGame = (GameType)n;
+      menuSelection = n;
+      menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, MENU_COUNT - MENU_VISIBLE));
+      Serial.print("GAME,");
+      Serial.println(n);
+    }
+    return;
+  }
+
+  if (cmd == "BTN,1") {
+    virtualButtonPulse = true;
+    return;
+  }
+}
+
+void serviceSerial() {
+  static String inputLine;
+  while (Serial.available()) {
+    char ch = (char)Serial.read();
+    if (ch == '\n' || ch == '\r') {
+      if (inputLine.length()) processSerialCommand(inputLine);
+      inputLine = "";
+    } else if (inputLine.length() < 80) {
+      inputLine += ch;
+    }
+  }
+
+  if (serialInputStream) {
+    static unsigned long lastSerialInput = 0;
+    unsigned long now = millis();
+    if (now - lastSerialInput >= 50) {
+      lastSerialInput = now;
+      sendSerialJoystick();
+    }
+  }
+}
+
 
 // =====================================================
 //  JOYSTICK helpers (wide dead-zone)
