@@ -38,6 +38,17 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#define OLED_SDA 4
+#define OLED_SCL 15
+#define OLED_RESET 16
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_ADDR 0x3C
+#define JOY_X 32
+#define JOY_Y 33
+#define JOY_BTN 25
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
 // -------------------- States --------------------
 enum GameState { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER, STATE_WIFI };
 enum GameType  {
