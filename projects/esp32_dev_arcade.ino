@@ -210,6 +210,11 @@ static bool serialInputStream = false;
 static bool serialLastButton = false;
 static bool virtualButtonPulse = false;
 
+bool buttonPressed();
+int joyXDir();
+int joyYDir();
+void startGame();
+
 void sendSerialJoystick() {
   int x = joyXDir() * 100;
   int y = joyYDir() * 100;
@@ -348,10 +353,6 @@ int joyYDir() {
 // =====================================================
 //  DRAW MAN
 // =====================================================
-bool buttonPressed();
-int joyXDir();
-int joyYDir();
-
 void drawMan(int x, int y, int frame, bool right) {
   int by = GROUND_Y - (y - cameraY);
 
