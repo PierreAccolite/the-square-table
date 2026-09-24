@@ -1,0 +1,64 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #101416;
+  color: #f2f2f2;
+}
+
+main {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1, h2, h3 {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 2px;
+}
+
+h2 {
+  font-size: 1rem;
+  opacity: .65;
+}
+
+.panel {
+  background: #1b2225;
+  border: 1px solid #354247;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
+}
+
+button {
+  font-size: 1rem;
+  padding: 12px 16px;
+  margin: 4px;
+  border-radius: 8px;
+  border: 1px solid #607177;
+  background: #263237;
+  color: white;
+}
+
+button:disabled {
+  opacity: .35;
+}
+
+.readings {
+  font-size: 1.4rem;
+  line-height: 1.8;
+}
+
+pre {
+  min-height: 180px;
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: .85rem;
+}
