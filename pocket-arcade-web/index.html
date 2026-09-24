@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pocket Arcade USB Test</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>POCKET ARCADE</h1>
+    <h2>USB TEST</h2>
+
+    <section class="panel">
+      <button id="connect">CONNECT ESP32</button>
+      <button id="disconnect" disabled>DISCONNECT</button>
+      <div id="status">Status: Disconnected</div>
+      <div id="device">Device: —</div>
+    </section>
+
+    <section class="panel">
+      <button id="ping" disabled>PING</button>
+      <button id="streamOn" disabled>START STREAM</button>
+      <button id="streamOff" disabled>STOP STREAM</button>
+    </section>
+
+    <section class="panel readings">
+      <h3>Joystick</h3>
+      <div>X: <span id="joyX">—</span></div>
+      <div>Y: <span id="joyY">—</span></div>
+      <div>Button: <span id="joyBtn">—</span></div>
+    </section>
+
+    <section class="panel">
+      <h3>Console</h3>
+      <pre id="console"></pre>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
