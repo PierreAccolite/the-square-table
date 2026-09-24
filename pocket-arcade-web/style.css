@@ -62,3 +62,49 @@ pre {
   white-space: pre-wrap;
   font-size: .85rem;
 }
+
+/* Live joystick visual */
+.stick-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+.stick {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  border: 2px solid #607177;
+  border-radius: 50%;
+  background: radial-gradient(circle, #263237 0 8%, #182024 9% 100%);
+  box-sizing: border-box;
+}
+.stick::before,
+.stick::after {
+  content: "";
+  position: absolute;
+  background: #354247;
+}
+.stick::before {
+  width: 1px;
+  height: 100%;
+  left: 50%;
+  top: 0;
+}
+.stick::after {
+  width: 100%;
+  height: 1px;
+  left: 0;
+  top: 50%;
+}
+.stick-dot {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f2f2f2;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 12px rgba(255,255,255,.35);
+  pointer-events: none;
+}
