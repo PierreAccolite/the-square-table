@@ -67,13 +67,19 @@ enum GameType  {
 };
 
 const int GAME_COUNT = 12;
-const int MENU_COUNT = GAME_COUNT;
+const int MENU_COUNT = GAME_COUNT + 1; // #13 = WEB PLAY
 const int MENU_VISIBLE = 4;
 const unsigned long FRAME_TIME_MS = 30;
 
 GameState state = STATE_MENU;
 GameType  currentGame = GAME_DINO;
 int menuSelection = 0;
+
+// Explicit control ownership. LOCAL = OLED/physical only, WEB = browser owns
+// game selection and can provide remote joystick input over USB.
+static bool webMode = false;
+static unsigned long lastWebHeartbeat = 0;
+static const unsigned long WEB_TIMEOUT_MS = 3000;
 int gameOverSelection = 0;
 
 // -------------------- Shared player (used by 1-3) --------------------
@@ -193,7 +199,8 @@ const char* gameNames[GAME_COUNT] = {
   "9. Flappy",
   "10. Racing",
   "11. Memory",
-  "12. Coin Collector"
+  "12. Coin Collector",
+  "13. WEB PLAY"
 };
 // -------------------- Timing --------------------
 unsigned long lastFrame = 0;
@@ -203,6 +210,9 @@ unsigned long lastFrame = 0;
 // =====================================================
 void startGame();
 void enterGameOver();
+void enterWebMode();
+void exitWebMode();
+void drawWebMenu();
 int currentScore();
 void recordScore();
 void updateSnake();
@@ -259,6 +269,27 @@ void processSerialCommand(const String& command) {
     return;
   }
 
+  // Explicit browser ownership handshake.
+  if (cmd == "WEB_HELLO") {
+    enterWebMode();
+    Serial.println("WEB_ACK");
+    return;
+  }
+
+  if (cmd == "WEB_HEARTBEAT") {
+    if (webMode) {
+      lastWebHeartbeat = millis();
+      Serial.println("WEB_ALIVE");
+    }
+    return;
+  }
+
+  if (cmd == "WEB_EXIT") {
+    exitWebMode();
+    Serial.println("WEB_MODE,OFF");
+    return;
+  }
+
   if (cmd == "INPUT") {
     serialInputStream = true;
     Serial.println("INPUT,ON");
@@ -274,7 +305,7 @@ void processSerialCommand(const String& command) {
   if (cmd == "START") {
     if (state == STATE_GAMEOVER) {
       startGame();
-    } else if (state == STATE_MENU) {
+    } else if (state == STATE_MENU && (webMode || menuSelection < GAME_COUNT)) {
       startGame();
     }
     return;
@@ -297,6 +328,7 @@ void processSerialCommand(const String& command) {
   if (cmd.startsWith("GAME,")) {
     int n = cmd.substring(5).toInt();
     if (n >= 0 && n < GAME_COUNT) {
+      if (!webMode) enterWebMode();
       currentGame = (GameType)n;
       menuSelection = n;
       menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, MENU_COUNT - MENU_VISIBLE));
@@ -326,6 +358,10 @@ void processSerialCommand(const String& command) {
 }
 
 void serviceSerial() {
+  if (webMode && millis() - lastWebHeartbeat > WEB_TIMEOUT_MS) {
+    exitWebMode();
+  }
+
   static String inputLine;
   while (Serial.available()) {
     char ch = (char)Serial.read();
@@ -366,20 +402,26 @@ bool buttonPressed() {
 }
 
 int joyXDir() {
-  if (remoteJoyX <= -35) return -1;
-  if (remoteJoyX >= 35) return 1;
+  // Physical joystick has priority. Remote/browser input is only accepted
+  // while the ESP32 is explicitly in WEB mode.
   int v = analogRead(JOY_X);
   if (v < 1000) return -1;
   if (v > 3000) return 1;
+  if (webMode) {
+    if (remoteJoyX <= -35) return -1;
+    if (remoteJoyX >= 35) return 1;
+  }
   return 0;
 }
 
 int joyYDir() {
-  if (remoteJoyY <= -35) return -1;
-  if (remoteJoyY >= 35) return 1;
   int v = analogRead(JOY_Y);
   if (v < 1000) return -1;
   if (v > 3000) return 1;
+  if (webMode) {
+    if (remoteJoyY <= -35) return -1;
+    if (remoteJoyY >= 35) return 1;
+  }
   return 0;
 }
 
@@ -413,7 +455,26 @@ void drawMan(int x, int y, int frame, bool right) {
 // =====================================================
 //  MENU
 // =====================================================
+void drawWebMenu() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(28, 4);
+  display.print("WEB PLAY");
+  display.setCursor(13, 20);
+  display.print("USB CONTROLLER");
+  display.setCursor(23, 34);
+  display.print("CONNECTED");
+  display.setCursor(17, 50);
+  display.print("SELECT GAME ON PC");
+  display.display();
+}
+
 void drawMenu() {
+  if (webMode) {
+    drawWebMenu();
+    return;
+  }
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
@@ -449,6 +510,11 @@ void drawMenu() {
 }
 
 void updateMenu() {
+  if (webMode) {
+    if (buttonPressed() && state == STATE_MENU) startGame();
+    return;
+  }
+
   static int lastDir = 0;
   int dir = joyYDir();
 
@@ -465,6 +531,10 @@ void updateMenu() {
   lastDir = dir;
 
   if (buttonPressed()) {
+    if (menuSelection == GAME_COUNT) {
+      enterWebMode();
+      return;
+    }
     currentGame = (GameType)menuSelection;
     startGame();
   }
@@ -540,6 +610,28 @@ void updateGameOver() {
 // =====================================================
 //  START / RESET
 // =====================================================
+void enterWebMode() {
+  webMode = true;
+  lastWebHeartbeat = millis();
+  remoteJoyX = 0;
+  remoteJoyY = 0;
+  virtualButtonPulse = false;
+  state = STATE_MENU;
+  menuSelection = currentGame;
+  Serial.println("WEB_MODE,ON");
+}
+
+void exitWebMode() {
+  webMode = false;
+  remoteJoyX = 0;
+  remoteJoyY = 0;
+  virtualButtonPulse = false;
+  state = STATE_MENU;
+  menuSelection = constrain((int)currentGame, 0, GAME_COUNT - 1);
+  menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, GAME_COUNT - MENU_VISIBLE));
+  Serial.println("WEB_MODE,OFF");
+}
+
 void startGame() {
   manX = 30; manY = 0; manVy = 0;
   facingRight = true; walkFrame = 0; frameCnt = 0;
