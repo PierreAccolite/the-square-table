@@ -103,6 +103,21 @@ async function startPhysicalGame(){
 async function pulsePhysicalButton(){
   if(writer)await sendLine("BTN,1");
 }
+
+// Forward the browser's joystick/keyboard state to the ESP32 at the same
+// cadence as the firmware input stream. The ESP32 still reports its physical
+// joystick back to us; these CTRL packets are only for webpage -> ESP32 input.
+let lastControlSent=0;
+async function sendBrowserControl(force=false){
+  if(!writer)return;
+  const now=performance.now();
+  if(!force && now-lastControlSent<50)return;
+  lastControlSent=now;
+  const x=Math.max(-100,Math.min(100,Math.round((joy.x+(keys.right?1:0)-(keys.left?1:0))*100)));
+  const y=Math.max(-100,Math.min(100,Math.round((joy.y+(keys.down?1:0)-(keys.up?1:0))*100)));
+  await sendLine("CTRL,"+x+","+y+",0");
+}
+setInterval(()=>{sendBrowserControl().catch(()=>{});},50);
 async function nextPhysicalGame(){
   selectGame(gameIndex+1);
   if(writer)await sendLine("GAME,"+gameIndex);
