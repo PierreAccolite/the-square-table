@@ -27,6 +27,12 @@
  *   14. Lunar Lander
  *   15. Frogger
  *   16. Tron
+ *   17. Simon
+ *   18. Minesweeper
+ *   19. Zombie Survival
+ *   20. Defender
+ *   21. Whack-a-Mole
+ *   22. Dodge
  *
  * V4 adds:
  *   - Scrollable game menu
@@ -71,10 +77,16 @@ enum GameType  {
   GAME_TETRIS=12,
   GAME_LUNAR=13,
   GAME_FROGGER=14,
-  GAME_TRON=15
+  GAME_TRON=15,
+  GAME_SIMON=16,
+  GAME_MINES=17,
+  GAME_ZOMBIE=18,
+  GAME_DEFENDER=19,
+  GAME_WHACK=20,
+  GAME_DODGE=21
 };
 
-const int GAME_COUNT = 16;
+const int GAME_COUNT = 22;
 const int MENU_COUNT = GAME_COUNT;
 const int MENU_VISIBLE = 4;
 const unsigned long FRAME_TIME_MS = 30;
@@ -187,8 +199,8 @@ bool coinsActive[8];
 
 
 // -------------------- Game 13 Tetris --------------------
-const int TETRIS_W=10,TETRIS_H=16; byte tetrisBoard[TETRIS_H][TETRIS_W];
-int tetrisPiece=0,tetrisRot=0,tetrisX=3,tetrisY=0,tetrisScore=0,tetrisLines=0; unsigned long tetrisLastDrop=0;
+const int TETRIS_W=8,TETRIS_H=12; byte tetrisBoard[TETRIS_H][TETRIS_W];
+int tetrisPiece=0,tetrisRot=0,tetrisX=2,tetrisY=0,tetrisScore=0,tetrisLines=0; unsigned long tetrisLastDrop=0;
 const uint16_t tetrisShapes[7][4]={{0x0F00,0x2222,0x0F00,0x2222},{0x6600,0x6600,0x6600,0x6600},{0x6C00,0x4620,0x6C00,0x4620},{0xC600,0x2640,0xC600,0x2640},{0x8E00,0x4C40,0xE200,0x44C0},{0x2E00,0x4460,0xE800,0xC440},{0x4E00,0x4640,0xE400,0x4C40}};
 // -------------------- Game 14 Lunar Lander --------------------
 float lunarX=64,lunarY=20,lunarVX=0,lunarVY=0; int lunarFuel=100,lunarScore=0,lunarPadX=52,lunarPadW=24;
@@ -196,6 +208,12 @@ float lunarX=64,lunarY=20,lunarVX=0,lunarVY=0; int lunarFuel=100,lunarScore=0,lu
 int frogX=64,frogY=56,frogScore=0,frogLives=3; struct FrogCar{int x,y,v;}; FrogCar frogCars[5];
 // -------------------- Game 16 Tron --------------------
 const int TRON_W=32,TRON_H=14; bool tronTrail[TRON_H][TRON_W]; int tronX=5,tronY=7,tronDX=1,tronDY=0,tronScore=0,tronEnemyX=26,tronEnemyY=6,tronEnemyDX=-1,tronEnemyDY=0;
+byte simonSeq[32]; int simonLength=1,simonInput=0,simonScore=0; bool simonShowing=true; unsigned long simonTimer=0;
+const int MINE_W=8,MINE_H=5,MINE_COUNT=7; bool mineHas[MINE_H][MINE_W],mineOpen[MINE_H][MINE_W]; int mineCursorX=0,mineCursorY=0,mineScore=0;
+struct Zombie{int x,y;bool active;}; Zombie zombies[6]; int zombieX=64,zombieY=48,zombieDX=0,zombieDY=-1,zombieScore=0,zombieShotX=0,zombieShotY=0; bool zombieShot=false;
+struct DefEnemy{int x,y,v;}; DefEnemy defEnemies[5]; int defX=20,defY=52,defScore=0,defBulletX=0,defBulletY=0; bool defBullet=false;
+bool moleActive[9]; int moleCursor=4,moleScore=0; unsigned long moleTimer=0;
+struct DodgeObj{int x,y,v;}; DodgeObj dodgeObjs[6]; int dodgeX=64,dodgeScore=0,dodgeSpeed=2;
 
 // Simple RAM high-score table. Persistent storage comes later.
 int highScores[GAME_COUNT] = {0};
@@ -218,7 +236,13 @@ const char* gameNames[MENU_COUNT] = {
   "13. Tetris",
   "14. Lunar Lander",
   "15. Frogger",
-  "16. Tron"
+  "16. Tron",
+  "17. Simon",
+  "18. Minesweeper",
+  "19. Zombie Survival",
+  "20. Defender",
+  "21. Whack-a-Mole",
+  "22. Dodge"
 };
 // -------------------- Timing --------------------
 unsigned long lastFrame = 0;
@@ -242,6 +266,9 @@ void updateMemory(); void drawMemory();
 void updateCoins(); void drawCoins();
 void updateTetris(); void drawTetris(); void updateLunar(); void drawLunar();
 void updateFrogger(); void drawFrogger(); void updateTron(); void drawTron();
+void updateSimon(); void drawSimon(); void updateMines(); void drawMines();
+void updateZombie(); void drawZombie(); void updateDefender(); void drawDefender();
+void updateWhack(); void drawWhack(); void updateDodge(); void drawDodge();
 
 // =====================================================
 //  JOYSTICK helpers (wide dead-zone)
@@ -374,6 +401,12 @@ int currentScore() {
   if (currentGame == GAME_LUNAR) return lunarScore;
   if (currentGame == GAME_FROGGER) return frogScore;
   if (currentGame == GAME_TRON) return tronScore;
+  if (currentGame == GAME_SIMON) return simonScore;
+  if (currentGame == GAME_MINES) return mineScore;
+  if (currentGame == GAME_ZOMBIE) return zombieScore;
+  if (currentGame == GAME_DEFENDER) return defScore;
+  if (currentGame == GAME_WHACK) return moleScore;
+  if (currentGame == GAME_DODGE) return dodgeScore;
   return 0;
 }
 
@@ -512,10 +545,16 @@ void startGame() {
     coinPlayerX=64; coinPlayerY=32; coinScore=0;
     for(int i=0;i<8;i++){ coinsActive[i]=true; coinsX[i]=random(8,120); coinsY[i]=random(14,54); }
   }
-  else if(currentGame==GAME_TETRIS){memset(tetrisBoard,0,sizeof(tetrisBoard));tetrisPiece=random(0,7);tetrisRot=0;tetrisX=3;tetrisY=0;tetrisScore=0;tetrisLines=0;tetrisLastDrop=millis();}
+  else if(currentGame==GAME_TETRIS){memset(tetrisBoard,0,sizeof(tetrisBoard));tetrisPiece=random(0,7);tetrisRot=0;tetrisX=2;tetrisY=0;tetrisScore=0;tetrisLines=0;tetrisLastDrop=millis();}
   else if(currentGame==GAME_LUNAR){lunarX=64;lunarY=18;lunarVX=lunarVY=0;lunarFuel=100;lunarScore=0;lunarPadX=random(8,96);}
   else if(currentGame==GAME_FROGGER){frogX=64;frogY=56;frogScore=0;frogLives=3;for(int i=0;i<5;i++){frogCars[i].x=random(0,128);frogCars[i].y=16+i*9;frogCars[i].v=(i&1)?-1:1;}}
   else if(currentGame==GAME_TRON){memset(tronTrail,0,sizeof(tronTrail));tronX=5;tronY=7;tronDX=1;tronDY=0;tronEnemyX=26;tronEnemyY=6;tronEnemyDX=-1;tronEnemyDY=0;tronScore=0;}
+  else if(currentGame==GAME_SIMON){for(int i=0;i<32;i++)simonSeq[i]=random(0,4);simonLength=1;simonInput=0;simonScore=0;simonShowing=true;simonTimer=millis()+700;}
+  else if(currentGame==GAME_MINES){memset(mineHas,0,sizeof(mineHas));memset(mineOpen,0,sizeof(mineOpen));mineCursorX=mineCursorY=mineScore=0;int n=0;while(n<MINE_COUNT){int x=random(0,MINE_W),y=random(0,MINE_H);if(!mineHas[y][x]){mineHas[y][x]=true;n++;}}}
+  else if(currentGame==GAME_ZOMBIE){zombieX=64;zombieY=48;zombieDX=0;zombieDY=-1;zombieScore=0;zombieShot=false;for(int i=0;i<6;i++){zombies[i].active=true;zombies[i].x=random(8,120);zombies[i].y=random(10,45);}}
+  else if(currentGame==GAME_DEFENDER){defX=20;defScore=0;defBullet=false;for(int i=0;i<5;i++){defEnemies[i].x=random(80,125);defEnemies[i].y=random(8,45);defEnemies[i].v=(i&1)?-1:1;}}
+  else if(currentGame==GAME_WHACK){for(int i=0;i<9;i++)moleActive[i]=false;moleCursor=4;moleScore=0;moleTimer=0;}
+  else if(currentGame==GAME_DODGE){dodgeX=64;dodgeScore=0;dodgeSpeed=2;for(int i=0;i<6;i++){dodgeObjs[i].x=random(5,123);dodgeObjs[i].y=-random(5,70);dodgeObjs[i].v=random(1,3);}}
 }
 
 // =====================================================
@@ -1384,9 +1423,9 @@ void drawCoins() {
 // =====================================================
 bool tetCell(int p,int r,int x,int y){if(x<0||x>=4||y<0||y>=4)return false;return(tetrisShapes[p][r&3]>>(15-y*4-x))&1;}
 bool tetFit(int p,int r,int px,int py){for(int y=0;y<4;y++)for(int x=0;x<4;x++)if(tetCell(p,r,x,y)){int bx=px+x,by=py+y;if(bx<0||bx>=TETRIS_W||by>=TETRIS_H||tetrisBoard[by][bx])return false;}return true;}
-void tetLock(){for(int y=0;y<4;y++)for(int x=0;x<4;x++)if(tetCell(tetrisPiece,tetrisRot,x,y))tetrisBoard[tetrisY+y][tetrisX+x]=1;for(int y=TETRIS_H-1;y>=0;y--){bool full=true;for(int x=0;x<TETRIS_W;x++)if(!tetrisBoard[y][x])full=false;if(full){for(int yy=y;yy>0;yy--)for(int x=0;x<TETRIS_W;x++)tetrisBoard[yy][x]=tetrisBoard[yy-1][x];for(int x=0;x<TETRIS_W;x++)tetrisBoard[0][x]=0;tetrisLines++;tetrisScore+=10;y++;}}tetrisPiece=random(0,7);tetrisRot=0;tetrisX=3;tetrisY=0;if(!tetFit(tetrisPiece,0,3,0))enterGameOver();}
+void tetLock(){for(int y=0;y<4;y++)for(int x=0;x<4;x++)if(tetCell(tetrisPiece,tetrisRot,x,y))tetrisBoard[tetrisY+y][tetrisX+x]=1;for(int y=TETRIS_H-1;y>=0;y--){bool full=true;for(int x=0;x<TETRIS_W;x++)if(!tetrisBoard[y][x])full=false;if(full){for(int yy=y;yy>0;yy--)for(int x=0;x<TETRIS_W;x++)tetrisBoard[yy][x]=tetrisBoard[yy-1][x];for(int x=0;x<TETRIS_W;x++)tetrisBoard[0][x]=0;tetrisLines++;tetrisScore+=10;y++;}}tetrisPiece=random(0,7);tetrisRot=0;tetrisX=2;tetrisY=0;if(!tetFit(tetrisPiece,0,2,0))enterGameOver();}
 void updateTetris(){static int lx=0,ly=0;int x=joyXDir(),y=joyYDir();if(x&&!lx&&tetFit(tetrisPiece,tetrisRot,tetrisX+x,tetrisY))tetrisX+=x;if(y<0&&!ly){int r=(tetrisRot+1)&3;if(tetFit(tetrisPiece,r,tetrisX,tetrisY))tetrisRot=r;}if(buttonPressed()){while(tetFit(tetrisPiece,tetrisRot,tetrisX,tetrisY+1))tetrisY++;tetLock();return;}lx=x;ly=y;int d=max(100,650-tetrisLines*20);if(millis()-tetrisLastDrop>d){tetrisLastDrop=millis();if(tetFit(tetrisPiece,tetrisRot,tetrisX,tetrisY+1))tetrisY++;else tetLock();}}
-void drawTetris(){display.clearDisplay();int ox=46,oy=8,b=4;display.drawRect(ox-1,oy-1,TETRIS_W*b+2,TETRIS_H*b+2,SSD1306_WHITE);for(int y=0;y<TETRIS_H;y++)for(int x=0;x<TETRIS_W;x++)if(tetrisBoard[y][x])display.fillRect(ox+x*b,oy+y*b,3,3,SSD1306_WHITE);for(int y=0;y<4;y++)for(int x=0;x<4;x++)if(tetCell(tetrisPiece,tetrisRot,x,y))display.fillRect(ox+(tetrisX+x)*b,oy+(tetrisY+y)*b,3,3,SSD1306_WHITE);display.setCursor(0,12);display.print("TETRIS");display.setCursor(0,25);display.print("S:");display.print(tetrisScore);display.setCursor(0,37);display.print("L:");display.print(tetrisLines);display.setCursor(0,50);display.print("BTN DROP");display.display();}
+void drawTetris(){display.clearDisplay();int ox=48,oy=8,b=4;display.drawRect(ox-1,oy-1,TETRIS_W*b+2,TETRIS_H*b+2,SSD1306_WHITE);for(int y=0;y<TETRIS_H;y++)for(int x=0;x<TETRIS_W;x++)if(tetrisBoard[y][x])display.fillRect(ox+x*b,oy+y*b,3,3,SSD1306_WHITE);for(int y=0;y<4;y++)for(int x=0;x<4;x++)if(tetCell(tetrisPiece,tetrisRot,x,y))display.fillRect(ox+(tetrisX+x)*b,oy+(tetrisY+y)*b,3,3,SSD1306_WHITE);display.setCursor(0,10);display.print("TETRIS");display.setCursor(0,23);display.print("S:");display.print(tetrisScore);display.setCursor(0,35);display.print("L:");display.print(tetrisLines);display.setCursor(0,49);display.print("UP ROT");display.setCursor(0,59);display.print("BTN DROP");display.display();}
 
 void updateLunar(){int x=joyXDir(),y=joyYDir();lunarVX=constrain(lunarVX+x*.12f,-2.0f,2.0f);if(y<0&&lunarFuel>0){lunarVY-=.28f;lunarFuel--;}lunarVY+=.10f;lunarX+=lunarVX;lunarY+=lunarVY;if(lunarX<5)lunarX=123;if(lunarX>123)lunarX=5;if(lunarY>=54){if(lunarX>=lunarPadX&&lunarX<=lunarPadX+lunarPadW&&abs(lunarVY)<1.7){lunarScore+=20;lunarY=18;lunarVY=lunarVX=0;lunarFuel=min(100,lunarFuel+35);lunarPadX=random(8,96);}else enterGameOver();}}
 void drawLunar(){display.clearDisplay();display.drawLine(0,55,127,55,SSD1306_WHITE);display.fillRect(lunarPadX,53,lunarPadW,3,SSD1306_WHITE);display.drawTriangle((int)lunarX,(int)lunarY-5,(int)lunarX-4,(int)lunarY+4,(int)lunarX+4,(int)lunarY+4,SSD1306_WHITE);display.setCursor(0,0);display.print("S:");display.print(lunarScore);display.setCursor(42,0);display.print("F:");display.print(lunarFuel);display.setCursor(82,0);display.print("V:");display.print((int)(lunarVY*10));display.display();}
@@ -1396,6 +1435,23 @@ void drawFrogger(){display.clearDisplay();for(int i=0;i<5;i++)display.fillRect(f
 
 void updateTron(){static unsigned long lastMove=0;int x=joyXDir(),y=joyYDir();if(x&&tronDX==0){tronDX=x;tronDY=0;}if(y&&tronDY==0){tronDX=0;tronDY=y;}if(millis()-lastMove<110)return;lastMove=millis();int nx=tronX+tronDX,ny=tronY+tronDY;if(nx<0||nx>=TRON_W||ny<0||ny>=TRON_H||tronTrail[ny][nx]){enterGameOver();return;}tronTrail[tronY][tronX]=true;tronX=nx;tronY=ny;tronScore++;int ex=tronEnemyX+tronEnemyDX,ey=tronEnemyY+tronEnemyDY;if(ex<0||ex>=TRON_W||ey<0||ey>=TRON_H||tronTrail[ey][ex]){tronEnemyDX=random(-1,2);tronEnemyDY=0;if(!tronEnemyDX)tronEnemyDY=random(-1,2);if(!tronEnemyDX&&!tronEnemyDY)tronEnemyDY=1;}else{tronTrail[tronEnemyY][tronEnemyX]=true;tronEnemyX=ex;tronEnemyY=ey;}if(tronX==tronEnemyX&&tronY==tronEnemyY)enterGameOver();}
 void drawTron(){display.clearDisplay();display.drawRect(0,7,127,56,SSD1306_WHITE);for(int y=0;y<TRON_H;y++)for(int x=0;x<TRON_W;x++)if(tronTrail[y][x])display.fillRect(x*4,9+y*4,3,3,SSD1306_WHITE);display.fillRect(tronX*4,9+tronY*4,4,4,SSD1306_WHITE);display.drawRect(tronEnemyX*4,9+tronEnemyY*4,4,4,SSD1306_WHITE);display.setCursor(0,0);display.print("TRON S:");display.print(tronScore);display.display();}
+
+// =====================================================
+//  GAMES 17-22
+// =====================================================
+void updateSimon(){if(simonShowing){if(millis()>simonTimer)simonShowing=false;return;}int d=-1;if(joyYDir()<0)d=0;else if(joyXDir()>0)d=1;else if(joyYDir()>0)d=2;else if(joyXDir()<0)d=3;if(d>=0){if(d==simonSeq[simonInput]){if(++simonInput>=simonLength){simonScore=simonLength++;simonInput=0;simonShowing=true;simonTimer=millis()+700;}}else enterGameOver();}}
+void drawSimon(){display.clearDisplay();int px[4]={28,76,28,76},py[4]={20,20,44,44};for(int i=0;i<4;i++)display.drawRect(px[i]-10,py[i]-8,20,16,SSD1306_WHITE);display.setCursor(0,0);display.print("SIMON ");display.print(simonLength);if(simonShowing){int d=simonSeq[simonInput];display.fillRect(px[d]-7,py[d]-5,15,11,SSD1306_WHITE);}display.display();}
+int mineAdj(int x,int y){int n=0;for(int yy=-1;yy<=1;yy++)for(int xx=-1;xx<=1;xx++){int nx=x+xx,ny=y+yy;if(nx>=0&&nx<MINE_W&&ny>=0&&ny<MINE_H&&mineHas[ny][nx])n++;}return n;}
+void updateMines(){static int lx=0,ly=0;int x=joyXDir(),y=joyYDir();if(x&&!lx)mineCursorX=constrain(mineCursorX+x,0,MINE_W-1);if(y&&!ly)mineCursorY=constrain(mineCursorY+y,0,MINE_H-1);lx=x;ly=y;if(buttonPressed()&&!mineOpen[mineCursorY][mineCursorX]){if(mineHas[mineCursorY][mineCursorX]){enterGameOver();return;}mineOpen[mineCursorY][mineCursorX]=true;mineScore++;}}
+void drawMines(){display.clearDisplay();for(int y=0;y<MINE_H;y++)for(int x=0;x<MINE_W;x++){int px=16+x*12,py=10+y*10;if(mineOpen[y][x]){display.fillRect(px,py,10,8,SSD1306_WHITE);display.setTextColor(SSD1306_BLACK);display.setCursor(px+3,py);display.print(mineAdj(x,y));display.setTextColor(SSD1306_WHITE);}else display.drawRect(px,py,10,8,SSD1306_WHITE);if(x==mineCursorX&&y==mineCursorY)display.drawRect(px-1,py-1,12,10,SSD1306_WHITE);}display.setCursor(0,0);display.print("S:");display.print(mineScore);display.display();}
+void updateZombie(){int x=joyXDir(),y=joyYDir();if(x){zombieX=constrain(zombieX+x*2,4,123);zombieDX=x;zombieDY=0;}if(y){zombieY=constrain(zombieY+y*2,10,59);zombieDY=y;zombieDX=0;}if(buttonPressed()){zombieShot=true;zombieShotX=zombieX;zombieShotY=zombieY;}if(zombieShot){zombieShotX+=zombieDX*5;zombieShotY+=zombieDY*5;if(!zombieDX&&!zombieDY)zombieShotY-=5;if(zombieShotX<0||zombieShotX>127||zombieShotY<8||zombieShotY>63)zombieShot=false;}for(int i=0;i<6;i++){if(zombies[i].x<zombieX)zombies[i].x++;else if(zombies[i].x>zombieX)zombies[i].x--;if(zombies[i].y<zombieY)zombies[i].y++;else if(zombies[i].y>zombieY)zombies[i].y--;if(abs(zombies[i].x-zombieX)<6&&abs(zombies[i].y-zombieY)<6){enterGameOver();return;}if(zombieShot&&abs(zombies[i].x-zombieShotX)<5&&abs(zombies[i].y-zombieShotY)<5){zombies[i].x=random(5,123);zombies[i].y=random(10,55);zombieScore++;zombieShot=false;}}}
+void drawZombie(){display.clearDisplay();for(int i=0;i<6;i++)display.fillCircle(zombies[i].x,zombies[i].y,3,SSD1306_WHITE);display.fillRect(zombieX-3,zombieY-3,7,7,SSD1306_WHITE);if(zombieShot)display.fillRect(zombieShotX,zombieShotY,3,3,SSD1306_WHITE);display.setCursor(0,0);display.print("ZOMBIE S:");display.print(zombieScore);display.display();}
+void updateDefender(){defX=constrain(defX+joyXDir()*3,5,123);if(buttonPressed()&&!defBullet){defBullet=true;defBulletX=defX;defBulletY=defY-4;}if(defBullet){defBulletY-=5;if(defBulletY<8)defBullet=false;}for(int i=0;i<5;i++){defEnemies[i].x+=defEnemies[i].v;if(defEnemies[i].x<4||defEnemies[i].x>124)defEnemies[i].v=-defEnemies[i].v;defEnemies[i].y+=(i%3==0);if(defEnemies[i].y>58){enterGameOver();return;}if(defBullet&&abs(defEnemies[i].x-defBulletX)<6&&abs(defEnemies[i].y-defBulletY)<5){defEnemies[i].x=random(80,125);defEnemies[i].y=random(8,30);defScore++;defBullet=false;}}}
+void drawDefender(){display.clearDisplay();for(int i=0;i<5;i++)display.fillCircle(defEnemies[i].x,defEnemies[i].y,3,SSD1306_WHITE);display.fillTriangle(defX,48,defX-5,56,defX+5,56,SSD1306_WHITE);if(defBullet)display.drawFastVLine(defBulletX,defBulletY,5,SSD1306_WHITE);display.setCursor(0,0);display.print("S:");display.print(defScore);display.print(" FIRE");display.display();}
+void updateWhack(){static int lx=0,ly=0;int x=joyXDir(),y=joyYDir();if(x&&!lx)moleCursor=constrain(moleCursor+x,0,8);if(y&&!ly)moleCursor=constrain(moleCursor+y*3,0,8);lx=x;ly=y;if(millis()>moleTimer){for(int i=0;i<9;i++)moleActive[i]=false;moleActive[random(0,9)]=true;moleTimer=millis()+random(450,900);}if(buttonPressed()&&moleActive[moleCursor]){moleActive[moleCursor]=false;moleScore++;}}
+void drawWhack(){display.clearDisplay();for(int i=0;i<9;i++){int x=20+(i%3)*44,y=14+(i/3)*16;display.drawCircle(x,y,5,SSD1306_WHITE);if(moleActive[i])display.fillCircle(x,y,3,SSD1306_WHITE);if(i==moleCursor)display.drawRect(x-7,y-7,14,14,SSD1306_WHITE);}display.setCursor(0,0);display.print("S:");display.print(moleScore);display.display();}
+void updateDodge(){dodgeX=constrain(dodgeX+joyXDir()*3,5,123);for(int i=0;i<6;i++){dodgeObjs[i].y+=dodgeObjs[i].v+dodgeSpeed-2;if(dodgeObjs[i].y>64){dodgeObjs[i].y=-random(5,25);dodgeObjs[i].x=random(5,123);dodgeScore++;if(dodgeScore%10==0&&dodgeSpeed<6)dodgeSpeed++;}if(dodgeObjs[i].y>47&&dodgeObjs[i].y<61&&abs(dodgeObjs[i].x-dodgeX)<7){enterGameOver();return;}}}
+void drawDodge(){display.clearDisplay();for(int i=0;i<6;i++)display.fillRect(dodgeObjs[i].x-2,dodgeObjs[i].y,5,7,SSD1306_WHITE);display.fillRect(dodgeX-4,55,8,6,SSD1306_WHITE);display.setCursor(0,0);display.print("DODGE S:");display.print(dodgeScore);display.display();}
 void updateCurrentGame() {
   switch (currentGame) {
     case GAME_DINO: updateDino(); break;
@@ -1414,6 +1470,12 @@ void updateCurrentGame() {
     case GAME_LUNAR: updateLunar(); break;
     case GAME_FROGGER: updateFrogger(); break;
     case GAME_TRON: updateTron(); break;
+    case GAME_SIMON: updateSimon(); break;
+    case GAME_MINES: updateMines(); break;
+    case GAME_ZOMBIE: updateZombie(); break;
+    case GAME_DEFENDER: updateDefender(); break;
+    case GAME_WHACK: updateWhack(); break;
+    case GAME_DODGE: updateDodge(); break;
   }
 }
 
@@ -1435,6 +1497,12 @@ void drawCurrentGame() {
     case GAME_LUNAR: drawLunar(); break;
     case GAME_FROGGER: drawFrogger(); break;
     case GAME_TRON: drawTron(); break;
+    case GAME_SIMON: drawSimon(); break;
+    case GAME_MINES: drawMines(); break;
+    case GAME_ZOMBIE: drawZombie(); break;
+    case GAME_DEFENDER: drawDefender(); break;
+    case GAME_WHACK: drawWhack(); break;
+    case GAME_DODGE: drawDodge(); break;
   }
 }
 
