@@ -91,6 +91,7 @@ Spike spikes[4];
 int dinoScore = 0, groundScroll = 0;
 int dinoSpeed = 3;
 int dinoCloudX = 92;
+unsigned long dinoLastSpawn = 0;
 
 // -------------------- Game 2 Boxes (with camera) --------------------
 struct Box { int x, y; bool active; };
@@ -176,7 +177,7 @@ int coinsX[8], coinsY[8];
 bool coinsActive[8];
 
 // Simple RAM high-score table. Persistent storage comes later.
-int highScores[GAME_COUNT] = {0, 0, 0, 0, 0};
+int highScores[GAME_COUNT] = {0};
 
 // -------------------- Menu --------------------
 int menuTop = 0;
@@ -529,6 +530,7 @@ void startGame() {
     groundScroll = 0;
     dinoSpeed = 3;
     dinoCloudX = 92;
+    dinoLastSpawn = millis();
     manX = 28;
     manY = 0;
     manVy = 0;
@@ -641,10 +643,9 @@ void updateDino() {
   if (dinoCloudX < -35)
     dinoCloudX = SCREEN_WIDTH + random(10, 50);
 
-  static unsigned long lastSpawn = 0;
   unsigned long spawnInterval = max(650UL, 1250UL - (unsigned long)dinoScore * 18UL);
 
-  if (millis() - lastSpawn > spawnInterval) {
+  if (millis() - dinoLastSpawn > spawnInterval) {
     for (int i = 0; i < 4; i++) {
       if (!spikes[i].active) {
         spikes[i].x = SCREEN_WIDTH + 4;
@@ -652,7 +653,7 @@ void updateDino() {
         break;
       }
     }
-    lastSpawn = millis();
+    dinoLastSpawn = millis();
   }
 
   for (int i = 0; i < 4; i++) {
