@@ -31,8 +31,8 @@
  *   - Non-blocking frame timing foundation
  *   - First additional games: Snake + Breakout
  *
- * USB Serial control for the local Pocket Arcade webpage.
- * Wi-Fi and Bluetooth are intentionally not used.
+ * Standalone ESP32 arcade console.
+ * Wi-Fi, Bluetooth, and web-game control are intentionally not used.
  */
 
 #include <Wire.h>
@@ -50,7 +50,7 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // -------------------- States --------------------
-enum GameState { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER, STATE_WIFI };
+enum GameState { STATE_MENU, STATE_PLAYING, STATE_GAMEOVER };
 enum GameType  {
   GAME_DINO=0,
   GAME_BOXES=1,
@@ -67,7 +67,7 @@ enum GameType  {
 };
 
 const int GAME_COUNT = 12;
-const int MENU_COUNT = GAME_COUNT + 1; // #13 = WEB PLAY
+const int MENU_COUNT = GAME_COUNT;
 const int MENU_VISIBLE = 4;
 const unsigned long FRAME_TIME_MS = 30;
 
@@ -75,11 +75,6 @@ GameState state = STATE_MENU;
 GameType  currentGame = GAME_DINO;
 int menuSelection = 0;
 
-// Explicit control ownership. LOCAL = OLED/physical only, WEB = browser owns
-// game selection and can provide remote joystick input over USB.
-static bool webMode = false;
-static unsigned long lastWebHeartbeat = 0;
-static const unsigned long WEB_TIMEOUT_MS = 3000;
 int gameOverSelection = 0;
 
 // -------------------- Shared player (used by 1-3) --------------------
@@ -199,8 +194,7 @@ const char* gameNames[MENU_COUNT] = {
   "9. Flappy",
   "10. Racing",
   "11. Memory",
-  "12. Coin Collector",
-  "13. WEB PLAY"
+  "12. Coin Collector"
 };
 // -------------------- Timing --------------------
 unsigned long lastFrame = 0;
@@ -210,9 +204,6 @@ unsigned long lastFrame = 0;
 // =====================================================
 void startGame();
 void enterGameOver();
-void enterWebMode();
-void exitWebMode();
-void drawWebMenu();
 int currentScore();
 void recordScore();
 void updateSnake();
@@ -226,175 +217,6 @@ void updateRacing(); void drawRacing();
 void updateMemory(); void drawMemory();
 void updateCoins(); void drawCoins();
 
-// USB Serial bridge for the local Pocket Arcade webpage.
-// The browser intentionally decodes the USB/UART link at 74880 baud. The ESP32 application UART remains 115200; this matches the tested USB-UART bridge behaviour.
-static bool serialInputStream = false;
-static bool serialLastButton = false;
-static bool virtualButtonPulse = false;
-// Web/browser joystick commands. Zero means "no remote direction", so the
-// physical joystick remains usable when the webpage is sitting at center.
-static int remoteJoyX = 0;
-static int remoteJoyY = 0;
-static unsigned long lastRemoteControl = 0;
-static const unsigned long REMOTE_CONTROL_TIMEOUT_MS = 150;
-
-bool buttonPressed();
-int joyXDir();
-int joyYDir();
-void startGame();
-
-void sendSerialJoystick() {
-  int x = joyXDir() * 100;
-  int y = joyYDir() * 100;
-  bool button = digitalRead(JOY_BTN) == LOW;
-  Serial.print("JOY,");
-  Serial.print(x);
-  Serial.print(",");
-  Serial.print(y);
-  Serial.print(",");
-  Serial.println(button ? 1 : 0);
-
-  if (button != serialLastButton) {
-    Serial.print("EVENT,BUTTON_");
-    Serial.println(button ? "DOWN" : "UP");
-    serialLastButton = button;
-  }
-}
-
-void processSerialCommand(const String& command) {
-  String cmd = command;
-  cmd.trim();
-  if (!cmd.length()) return;
-
-  if (cmd == "PING") {
-    Serial.println("PONG");
-    return;
-  }
-
-  // Explicit browser ownership handshake.
-  if (cmd == "WEB_HELLO") {
-    enterWebMode();
-    Serial.println("WEB_ACK");
-    return;
-  }
-
-  if (cmd == "WEB_HEARTBEAT") {
-    if (webMode) {
-      lastWebHeartbeat = millis();
-      Serial.println("WEB_ALIVE");
-    }
-    return;
-  }
-
-  if (cmd == "WEB_EXIT") {
-    exitWebMode();
-    Serial.println("WEB_MODE,OFF");
-    return;
-  }
-
-  if (cmd == "INPUT") {
-    serialInputStream = true;
-    Serial.println("INPUT,ON");
-    return;
-  }
-
-  if (cmd == "INPUT OFF") {
-    serialInputStream = false;
-    Serial.println("INPUT,OFF");
-    return;
-  }
-
-  if (cmd == "START") {
-    if (state == STATE_GAMEOVER) {
-      startGame();
-    } else if (state == STATE_MENU && (webMode || menuSelection < GAME_COUNT)) {
-      startGame();
-    }
-    return;
-  }
-
-  if (cmd == "MENU" || cmd == "BACK") {
-    state = STATE_MENU;
-    return;
-  }
-
-  if (cmd == "SELECT") {
-    if (state == STATE_MENU) {
-      menuSelection++;
-      if (menuSelection >= MENU_COUNT) menuSelection = 0;
-      menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, MENU_COUNT - MENU_VISIBLE));
-    }
-    return;
-  }
-
-  if (cmd.startsWith("GAME,")) {
-    int n = cmd.substring(5).toInt();
-    if (n >= 0 && n < GAME_COUNT) {
-      if (!webMode) enterWebMode();
-      currentGame = (GameType)n;
-      menuSelection = n;
-      menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, MENU_COUNT - MENU_VISIBLE));
-      Serial.print("GAME,");
-      Serial.println(n);
-    }
-    return;
-  }
-
-  if (cmd == "BTN,1") {
-    virtualButtonPulse = true;
-    return;
-  }
-
-  // Browser controls: CTRL,-100..100,-100..100,0/1
-  if (cmd.startsWith("CTRL,")) {
-    int p1 = cmd.indexOf(',', 5);
-    int p2 = cmd.indexOf(',', p1 + 1);
-    if (p1 > 0 && p2 > p1) {
-      remoteJoyX = constrain(cmd.substring(5, p1).toInt(), -100, 100);
-      remoteJoyY = constrain(cmd.substring(p1 + 1, p2).toInt(), -100, 100);
-      lastRemoteControl = millis();
-      if (cmd.substring(p2 + 1).toInt() != 0)
-        virtualButtonPulse = true;
-    }
-    return;
-  }
-}
-
-void serviceSerial() {
-  if (webMode && millis() - lastWebHeartbeat > WEB_TIMEOUT_MS) {
-    exitWebMode();
-  }
-
-  // A browser/USB control packet is valid only briefly. If the webpage stops
-  // sending input (pointer release, tab change, cable issue, etc.), force the
-  // remote joystick back to center instead of leaving the last direction latched.
-  if (webMode && millis() - lastRemoteControl > REMOTE_CONTROL_TIMEOUT_MS) {
-    remoteJoyX = 0;
-    remoteJoyY = 0;
-  }
-
-  static String inputLine;
-  while (Serial.available()) {
-    char ch = (char)Serial.read();
-    if (ch == '\n' || ch == '\r') {
-      if (inputLine.length()) processSerialCommand(inputLine);
-      inputLine = "";
-    } else if (inputLine.length() < 80) {
-      inputLine += ch;
-    }
-  }
-
-  if (serialInputStream) {
-    static unsigned long lastSerialInput = 0;
-    unsigned long now = millis();
-    if (now - lastSerialInput >= 50) {
-      lastSerialInput = now;
-      sendSerialJoystick();
-    }
-  }
-}
-
-
 // =====================================================
 //  JOYSTICK helpers (wide dead-zone)
 // =====================================================
@@ -402,26 +224,14 @@ bool buttonPressed() {
   static bool last = false;
   bool now = digitalRead(JOY_BTN) == LOW;
   bool pressed = now && !last;
-
-  if (virtualButtonPulse) {
-    virtualButtonPulse = false;
-    pressed = true;
-  }
-
   last = now;
   return pressed;
 }
 
 int joyXDir() {
-  // Physical joystick has priority. Remote/browser input is only accepted
-  // while the ESP32 is explicitly in WEB mode.
   int v = analogRead(JOY_X);
   if (v < 1000) return -1;
   if (v > 3000) return 1;
-  if (webMode) {
-    if (remoteJoyX <= -35) return -1;
-    if (remoteJoyX >= 35) return 1;
-  }
   return 0;
 }
 
@@ -429,10 +239,6 @@ int joyYDir() {
   int v = analogRead(JOY_Y);
   if (v < 1000) return -1;
   if (v > 3000) return 1;
-  if (webMode) {
-    if (remoteJoyY <= -35) return -1;
-    if (remoteJoyY >= 35) return 1;
-  }
   return 0;
 }
 
@@ -466,26 +272,7 @@ void drawMan(int x, int y, int frame, bool right) {
 // =====================================================
 //  MENU
 // =====================================================
-void drawWebMenu() {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(28, 4);
-  display.print("WEB PLAY");
-  display.setCursor(13, 20);
-  display.print("USB CONTROLLER");
-  display.setCursor(23, 34);
-  display.print("CONNECTED");
-  display.setCursor(17, 50);
-  display.print("SELECT GAME ON PC");
-  display.display();
-}
-
 void drawMenu() {
-  if (webMode) {
-    drawWebMenu();
-    return;
-  }
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
@@ -524,9 +311,6 @@ void updateMenu() {
   static int lastDir = 0;
   int dir = joyYDir();
 
-  // Same edge-triggered menu behaviour as the physical OLED menu: one
-  // deliberate move changes one item, and holding the stick does not repeat
-  // every frame. In WEB mode the selection is also mirrored to the browser.
   if (dir != 0 && lastDir == 0) {
     menuSelection = constrain(menuSelection + dir, 0, MENU_COUNT - 1);
 
@@ -535,36 +319,15 @@ void updateMenu() {
 
     if (menuSelection >= menuTop + MENU_VISIBLE)
       menuTop = menuSelection - MENU_VISIBLE + 1;
-
-    if (webMode && menuSelection < GAME_COUNT) {
-      currentGame = (GameType)menuSelection;
-      Serial.print("GAME,");
-      Serial.println(menuSelection);
-    }
   }
 
   lastDir = dir;
 
   if (buttonPressed()) {
-    if (webMode) {
-      if (menuSelection < GAME_COUNT) {
-        currentGame = (GameType)menuSelection;
-        startGame();
-      }
-      return;
-    }
-
-    if (menuSelection == GAME_COUNT) {
-      enterWebMode();
-      return;
-    }
-
     currentGame = (GameType)menuSelection;
     startGame();
   }
 }
-
-
 
 // =====================================================
 //  GAME OVER
@@ -634,30 +397,6 @@ void updateGameOver() {
 // =====================================================
 //  START / RESET
 // =====================================================
-void enterWebMode() {
-  webMode = true;
-  lastWebHeartbeat = millis();
-  remoteJoyX = 0;
-  remoteJoyY = 0;
-  lastRemoteControl = millis();
-  virtualButtonPulse = false;
-  state = STATE_MENU;
-  menuSelection = currentGame;
-  Serial.println("WEB_MODE,ON");
-}
-
-void exitWebMode() {
-  webMode = false;
-  remoteJoyX = 0;
-  remoteJoyY = 0;
-  lastRemoteControl = millis();
-  virtualButtonPulse = false;
-  state = STATE_MENU;
-  menuSelection = constrain((int)currentGame, 0, GAME_COUNT - 1);
-  menuTop = constrain(menuSelection - MENU_VISIBLE + 1, 0, max(0, GAME_COUNT - MENU_VISIBLE));
-  Serial.println("WEB_MODE,OFF");
-}
-
 void startGame() {
   manX = 30; manY = 0; manVy = 0;
   facingRight = true; walkFrame = 0; frameCnt = 0;
@@ -1663,8 +1402,6 @@ void setup() {
 }
 
 void loop() {
-  serviceSerial();
-
   unsigned long now = millis();
   if (now - lastFrame < FRAME_TIME_MS) return;
   lastFrame = now;
@@ -1681,9 +1418,6 @@ void loop() {
     case STATE_GAMEOVER:
       updateGameOver();
       drawGameOver();
-      break;
-    case STATE_WIFI:
-      state = STATE_MENU;
       break;
   }
 }
