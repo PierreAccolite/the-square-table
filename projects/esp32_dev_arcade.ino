@@ -221,6 +221,10 @@ void updateCoins(); void drawCoins();
 static bool serialInputStream = false;
 static bool serialLastButton = false;
 static bool virtualButtonPulse = false;
+// Web/browser joystick commands. Zero means "no remote direction", so the
+// physical joystick remains usable when the webpage is sitting at center.
+static int remoteJoyX = 0;
+static int remoteJoyY = 0;
 
 bool buttonPressed();
 int joyXDir();
@@ -306,6 +310,19 @@ void processSerialCommand(const String& command) {
     virtualButtonPulse = true;
     return;
   }
+
+  // Browser controls: CTRL,-100..100,-100..100,0/1
+  if (cmd.startsWith("CTRL,")) {
+    int p1 = cmd.indexOf(',', 5);
+    int p2 = cmd.indexOf(',', p1 + 1);
+    if (p1 > 0 && p2 > p1) {
+      remoteJoyX = constrain(cmd.substring(5, p1).toInt(), -100, 100);
+      remoteJoyY = constrain(cmd.substring(p1 + 1, p2).toInt(), -100, 100);
+      if (cmd.substring(p2 + 1).toInt() != 0)
+        virtualButtonPulse = true;
+    }
+    return;
+  }
 }
 
 void serviceSerial() {
@@ -349,16 +366,20 @@ bool buttonPressed() {
 }
 
 int joyXDir() {
+  if (remoteJoyX <= -35) return -1;
+  if (remoteJoyX >= 35) return 1;
   int v = analogRead(JOY_X);
   if (v < 1000) return -1;
-  if (v > 3000) return  1;
+  if (v > 3000) return 1;
   return 0;
 }
 
 int joyYDir() {
+  if (remoteJoyY <= -35) return -1;
+  if (remoteJoyY >= 35) return 1;
   int v = analogRead(JOY_Y);
   if (v < 1000) return -1;
-  if (v > 3000) return  1;
+  if (v > 3000) return 1;
   return 0;
 }
 
