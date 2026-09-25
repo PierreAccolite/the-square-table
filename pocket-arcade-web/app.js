@@ -69,6 +69,7 @@ async function connectSerial(){
     await new Promise(r=>setTimeout(r,700));
     if(!lastPongAt){
       log("NO PONG @ "+POCKET_ARCADE_BAUD+" — check that esp32_dev_arcade.ino is flashed.");
+      await disconnectSerial(false);
       setLink(false,true);
       return;
     }
