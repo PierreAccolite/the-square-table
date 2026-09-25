@@ -3,6 +3,8 @@ const POCKET_ARCADE_LINE={dataBits:8,stopBits:1,parity:"none",bufferSize:4096,fl
 let port=null,reader=null,writer=null,keepReading=false,receiveBuffer="";
 let decoder=new TextDecoder("utf-8");
 let lastPongAt=0;
+let webModeAck=false;
+let lastWebHeartbeat=0;
 const serialState={x:0,y:0,button:0};
 
 const $=id=>document.getElementById(id);
@@ -28,6 +30,9 @@ function handleSerialLine(line){
   if(!line)return;
   if(line.length<100)log("< "+line);
   if(line==="PONG"){lastPongAt=performance.now();setLink(true);return;}
+  if(line==="WEB_ACK"){webModeAck=true;lastWebHeartbeat=performance.now();log("< WEB MODE ACTIVE");return;}
+  if(line==="WEB_ALIVE"){lastWebHeartbeat=performance.now();return;}
+  if(line==="WEB_MODE,OFF"){webModeAck=false;return;}
   if(line.startsWith("JOY,")){
     const p=line.split(",");
     if(p.length>=4){serialState.x=Number(p[1])||0;serialState.y=Number(p[2])||0;serialState.button=Number(p[3])||0;joy.x=serialState.x/100;joy.y=serialState.y/100;updateSerialStick();}
@@ -73,11 +78,22 @@ async function connectSerial(){
       setLink(false,true);
       return;
     }
+    await sendLine("WEB_HELLO");
+    await new Promise(r=>setTimeout(r,150));
+    if(!webModeAck){
+      log("WEB MODE handshake failed.");
+      await disconnectSerial(false);
+      return;
+    }
     await sendLine("INPUT");
     await sendLine("GAME,"+gameIndex);
   }catch(e){log("CONNECT ERROR: "+e.name+": "+e.message);await disconnectSerial(false);}
 }
 async function disconnectSerial(show=true){
+  if(writer && webModeAck){
+    try{await writer.write(new TextEncoder().encode("WEB_EXIT\n"));}catch(_){}
+  }
+  webModeAck=false;
   keepReading=false;
   try{if(reader)await reader.cancel();}catch(_){}
   try{if(reader)reader.releaseLock();}catch(_){}
@@ -118,6 +134,13 @@ async function sendBrowserControl(force=false){
   await sendLine("CTRL,"+x+","+y+",0");
 }
 setInterval(()=>{sendBrowserControl().catch(()=>{});},50);
+setInterval(async()=>{
+  if(!writer || !webModeAck)return;
+  try{
+    await sendLine("WEB_HEARTBEAT");
+    lastWebHeartbeat=performance.now();
+  }catch(_){}
+},1000);
 async function nextPhysicalGame(){
   selectGame(gameIndex+1);
   if(writer)await sendLine("GAME,"+gameIndex);
