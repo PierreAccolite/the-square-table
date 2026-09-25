@@ -1198,3 +1198,466 @@ void updateBreakout() {
   int brickW = 16;
   int brickH = 6;
   int brickTop = 14;
+
+
+  int col = breakoutBallX / brickW;
+  int row = (breakoutBallY - brickTop) / brickH;
+
+  if (col >= 0 && col < BRICK_COLS && row >= 0 && row < BRICK_ROWS && bricks[row][col]) {
+    bricks[row][col] = false;
+    breakoutScore++;
+    breakoutBallVY = -breakoutBallVY;
+
+    bool anyLeft = false;
+    for (int r = 0; r < BRICK_ROWS; r++)
+      for (int c = 0; c < BRICK_COLS; c++)
+        if (bricks[r][c]) anyLeft = true;
+
+    if (!anyLeft) {
+      enterGameOver();
+      return;
+    }
+  }
+}
+
+void drawBreakout() {
+  display.clearDisplay();
+  for (int r = 0; r < BRICK_ROWS; r++)
+    for (int c = 0; c < BRICK_COLS; c++)
+      if (bricks[r][c])
+        display.fillRect(c * 16 + 1, 14 + r * 6, 14, 5, SSD1306_WHITE);
+  display.fillRect(breakoutPaddleX, 58, 24, 3, SSD1306_WHITE);
+  display.fillRect(breakoutBallX, breakoutBallY, 3, 3, SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("S:");
+  display.print(breakoutScore);
+  display.print(" L:");
+  display.print(breakoutLives);
+  display.display();
+}
+
+void fireInvader() {
+  for (int i = 0; i < INV_MAX_BULLETS; i++) {
+    if (!invaderBulletActive[i]) {
+      invaderBulletActive[i] = true;
+      invaderBulletX[i] = invaderPlayerX + 4;
+      invaderBulletY[i] = 53;
+      return;
+    }
+  }
+}
+
+void updateInvaders() {
+  int d = joyXDir();
+  invaderPlayerX = constrain(invaderPlayerX + d * 2, 2, 118);
+  if (buttonPressed()) fireInvader();
+
+  static uint32_t t = 0;
+  if (millis() - t > 350) {
+    t = millis();
+    bool edge = false;
+    for (int r = 0; r < INV_ROWS; r++)
+      for (int c = 0; c < INV_COLS; c++)
+        if (invaders[r][c]) {
+          int x = 12 + c * 16 + invaderOffsetX;
+          if ((invaderDir > 0 && x > 112) || (invaderDir < 0 && x < 2)) edge = true;
+        }
+    if (edge) {
+      invaderDir = -invaderDir;
+      invaderDrop += 4;
+    } else {
+      invaderOffsetX += invaderDir * 3;
+    }
+  }
+
+  for (int i = 0; i < INV_MAX_BULLETS; i++) {
+    if (!invaderBulletActive[i]) continue;
+    invaderBulletY[i] -= 4;
+    if (invaderBulletY[i] < 8) {
+      invaderBulletActive[i] = false;
+      continue;
+    }
+    for (int r = 0; r < INV_ROWS; r++)
+      for (int c = 0; c < INV_COLS; c++)
+        if (invaders[r][c]) {
+          int x = 12 + c * 16 + invaderOffsetX;
+          int y = 15 + r * 9 + invaderDrop;
+          if (invaderBulletX[i] >= x && invaderBulletX[i] <= x + 11 &&
+              invaderBulletY[i] >= y && invaderBulletY[i] <= y + 6) {
+            invaders[r][c] = false;
+            invaderBulletActive[i] = false;
+            invaderScore++;
+          }
+        }
+  }
+
+  for (int r = 0; r < INV_ROWS; r++)
+    for (int c = 0; c < INV_COLS; c++)
+      if (invaders[r][c] && 15 + r * 9 + invaderDrop > 50) {
+        enterGameOver();
+        return;
+      }
+
+  bool left = false;
+  for (int r = 0; r < INV_ROWS; r++)
+    for (int c = 0; c < INV_COLS; c++)
+      if (invaders[r][c]) left = true;
+  if (!left) enterGameOver();
+}
+
+void drawInvaders() {
+  display.clearDisplay();
+  for (int r = 0; r < INV_ROWS; r++)
+    for (int c = 0; c < INV_COLS; c++)
+      if (invaders[r][c]) {
+        int x = 12 + c * 16 + invaderOffsetX;
+        int y = 15 + r * 9 + invaderDrop;
+        display.fillRect(x + 2, y, 8, 3, SSD1306_WHITE);
+        display.drawLine(x, y + 3, x + 11, y + 3, SSD1306_WHITE);
+      }
+  display.fillRect(invaderPlayerX, 58, 9, 3, SSD1306_WHITE);
+  for (int i = 0; i < INV_MAX_BULLETS; i++)
+    if (invaderBulletActive[i])
+      display.drawFastVLine(invaderBulletX[i], invaderBulletY[i], 3, SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("S:");
+  display.print(invaderScore);
+  display.print(" L:");
+  display.print(invaderLives);
+  display.display();
+}
+
+void fireAsteroid() {
+  for (int i = 0; i < 3; i++) {
+    if (!asteroidBulletActive[i]) {
+      asteroidBulletActive[i] = true;
+      asteroidBulletX[i] = asteroidShipX;
+      asteroidBulletY[i] = asteroidShipY - 5;
+      asteroidBulletVX[i] = 0;
+      asteroidBulletVY[i] = -4;
+      return;
+    }
+  }
+}
+
+void updateAsteroids() {
+  asteroidShipX = constrain(asteroidShipX + joyXDir() * 2, 4, 123);
+  asteroidShipY = constrain(asteroidShipY + joyYDir() * 2, 12, 58);
+  if (buttonPressed()) fireAsteroid();
+
+  for (int i = 0; i < 6; i++) {
+    if (!asteroids[i].active) continue;
+    asteroids[i].x += asteroids[i].vx;
+    asteroids[i].y += asteroids[i].vy;
+    if (asteroids[i].x < -8) asteroids[i].x = 136;
+    if (asteroids[i].x > 136) asteroids[i].x = -8;
+    if (asteroids[i].y < 8) asteroids[i].y = 58;
+    if (asteroids[i].y > 60) asteroids[i].y = 8;
+
+    int dx = asteroids[i].x - asteroidShipX;
+    int dy = asteroids[i].y - asteroidShipY;
+    if (dx * dx + dy * dy < 64) {
+      if (--asteroidLives <= 0) {
+        enterGameOver();
+        return;
+      }
+      asteroids[i].x = random(0, 128);
+      asteroids[i].y = random(12, 45);
+    }
+  }
+
+  for (int b = 0; b < 3; b++) {
+    if (!asteroidBulletActive[b]) continue;
+    asteroidBulletX[b] += asteroidBulletVX[b];
+    asteroidBulletY[b] += asteroidBulletVY[b];
+    if (asteroidBulletY[b] < 8) {
+      asteroidBulletActive[b] = false;
+      continue;
+    }
+    for (int a = 0; a < 6; a++) {
+      if (!asteroids[a].active) continue;
+      int dx = asteroids[a].x - asteroidBulletX[b];
+      int dy = asteroids[a].y - asteroidBulletY[b];
+      if (dx * dx + dy * dy < 49) {
+        asteroids[a].active = false;
+        asteroidBulletActive[b] = false;
+        asteroidScore++;
+        break;
+      }
+    }
+  }
+
+  bool any = false;
+  for (int i = 0; i < 6; i++)
+    if (asteroids[i].active) any = true;
+  if (!any) {
+    for (int i = 0; i < 6; i++) {
+      asteroids[i].active = true;
+      asteroids[i].x = random(0, 128);
+      asteroids[i].y = random(12, 45);
+      asteroids[i].vx = random(-2, 3);
+      asteroids[i].vy = random(-1, 2);
+      if (!asteroids[i].vx && !asteroids[i].vy) asteroids[i].vx = 1;
+    }
+  }
+}
+
+void drawAsteroids() {
+  display.clearDisplay();
+  for (int i = 0; i < 6; i++)
+    if (asteroids[i].active)
+      display.drawCircle(asteroids[i].x, asteroids[i].y, asteroids[i].size, SSD1306_WHITE);
+  display.drawTriangle(asteroidShipX, asteroidShipY - 5,
+                       asteroidShipX - 4, asteroidShipY + 4,
+                       asteroidShipX + 4, asteroidShipY + 4,
+                       SSD1306_WHITE);
+  for (int i = 0; i < 3; i++)
+    if (asteroidBulletActive[i])
+      display.fillRect(asteroidBulletX[i], asteroidBulletY[i], 2, 3, SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("S:");
+  display.print(asteroidScore);
+  display.print(" L:");
+  display.print(asteroidLives);
+  display.display();
+}
+
+void updateFlappy() {
+  if (buttonPressed() || joyYDir() < 0) flappyV = -5;
+  flappyV = constrain(flappyV + 1, -6, 5);
+  flappyY += flappyV;
+  flappyPipeX -= 2;
+  if (flappyPipeX < -8) {
+    flappyPipeX = 128;
+    flappyGapY = random(20, 44);
+    flappyScore++;
+  }
+  if (flappyY < 8 || flappyY > 60) {
+    enterGameOver();
+    return;
+  }
+  if (flappyPipeX < 19 && flappyPipeX + 8 > 13 &&
+      (flappyY < flappyGapY - 10 || flappyY > flappyGapY + 10))
+    enterGameOver();
+}
+
+void drawFlappy() {
+  display.clearDisplay();
+  display.fillCircle(16, flappyY, 3, SSD1306_WHITE);
+  display.fillRect(flappyPipeX, 8, 8, max(0, flappyGapY - 18), SSD1306_WHITE);
+  display.fillRect(flappyPipeX, flappyGapY + 10, 8, 64 - (flappyGapY + 10), SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("S:");
+  display.print(flappyScore);
+  display.display();
+}
+
+void updateRacing() {
+  raceCarX = constrain(raceCarX + joyXDir() * 3, 42, 82);
+  raceRoadOffset = (raceRoadOffset + raceSpeed) % 12;
+  for (int i = 0; i < 4; i++) {
+    raceObstacles[i].y += raceSpeed;
+    if (raceObstacles[i].y > 64) {
+      raceObstacles[i].y = -random(20, 60);
+      raceObstacles[i].x = random(45, 80);
+      raceScore++;
+      if (raceScore % 10 == 0 && raceSpeed < 5) raceSpeed++;
+    }
+    if (raceObstacles[i].y > 48 && raceObstacles[i].y < 62 &&
+        abs(raceObstacles[i].x - raceCarX) < 8) {
+      enterGameOver();
+      return;
+    }
+  }
+}
+
+void drawRacing() {
+  display.clearDisplay();
+  display.drawLine(38, 0, 38, 64, SSD1306_WHITE);
+  display.drawLine(90, 0, 90, 64, SSD1306_WHITE);
+  for (int y = -12 + raceRoadOffset; y < 64; y += 12)
+    display.fillRect(63, y, 2, 7, SSD1306_WHITE);
+  for (int i = 0; i < 4; i++)
+    display.fillRect(raceObstacles[i].x - 4, raceObstacles[i].y, 8, 10, SSD1306_WHITE);
+  display.fillRect(raceCarX - 4, 53, 8, 9, SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("S:");
+  display.print(raceScore);
+  display.print(" x");
+  display.print(raceSpeed);
+  display.display();
+}
+
+void updateMemory() {
+  static int lx = 0, ly = 0;
+  if (memoryPauseUntil) {
+    if (millis() < memoryPauseUntil) return;
+    if (memoryCards[memoryFirst] == memoryCards[memorySecond]) {
+      memoryFound[memoryFirst] = true;
+      memoryFound[memorySecond] = true;
+      memoryScore++;
+    }
+    memoryFirst = memorySecond = -1;
+    memoryPauseUntil = 0;
+  }
+
+  int x = joyXDir(), y = joyYDir();
+  if (x && !lx) {
+    int col = constrain(memoryCursor % 4 + x, 0, 3);
+    memoryCursor = (memoryCursor / 4) * 4 + col;
+  }
+  if (y && !ly) {
+    int row = constrain(memoryCursor / 4 + y, 0, 1);
+    memoryCursor = row * 4 + memoryCursor % 4;
+  }
+  lx = x;
+  ly = y;
+
+  if (buttonPressed() && !memoryFound[memoryCursor]) {
+    if (memoryFirst < 0) memoryFirst = memoryCursor;
+    else if (memorySecond < 0 && memoryCursor != memoryFirst) {
+      memorySecond = memoryCursor;
+      memoryPauseUntil = millis() + 650;
+    }
+  }
+
+  bool done = true;
+  for (int i = 0; i < 8; i++)
+    if (!memoryFound[i]) done = false;
+  if (done) enterGameOver();
+}
+
+void drawMemory() {
+  display.clearDisplay();
+  for (int i = 0; i < 8; i++) {
+    int x = 3 + (i % 4) * 31;
+    int y = 10 + (i / 4) * 25;
+    display.drawRect(x, y, 27, 22, SSD1306_WHITE);
+    bool show = memoryFound[i] || i == memoryFirst || i == memorySecond;
+    display.setCursor(x + 9, y + 7);
+    display.print(show ? String(memoryCards[i] + 1) : String("?"));
+    if (i == memoryCursor) display.drawRect(x - 1, y - 1, 29, 24, SSD1306_WHITE);
+  }
+  display.setCursor(0, 0);
+  display.print("Pairs:");
+  display.print(memoryScore);
+  display.display();
+}
+
+void updateCoins() {
+  coinPlayerX = constrain(coinPlayerX + joyXDir() * 2, 4, 123);
+  coinPlayerY = constrain(coinPlayerY + joyYDir() * 2, 10, 59);
+  for (int i = 0; i < 8; i++) {
+    if (!coinsActive[i]) continue;
+    int dx = coinsX[i] - coinPlayerX;
+    int dy = coinsY[i] - coinPlayerY;
+    if (dx * dx + dy * dy < 36) {
+      coinsActive[i] = false;
+      coinScore++;
+    }
+  }
+  bool any = false;
+  for (int i = 0; i < 8; i++)
+    if (coinsActive[i]) any = true;
+  if (!any) {
+    for (int i = 0; i < 8; i++) {
+      coinsActive[i] = true;
+      coinsX[i] = random(8, 120);
+      coinsY[i] = random(14, 54);
+    }
+  }
+}
+
+void drawCoins() {
+  display.clearDisplay();
+  for (int i = 0; i < 8; i++)
+    if (coinsActive[i]) display.drawCircle(coinsX[i], coinsY[i], 3, SSD1306_WHITE);
+  display.fillRect(coinPlayerX - 3, coinPlayerY - 3, 7, 7, SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("Coins:");
+  display.print(coinScore);
+  display.display();
+}
+
+void updateCurrentGame() {
+  switch (currentGame) {
+    case GAME_DINO: updateDino(); break;
+    case GAME_BOXES: updateBoxes(); break;
+    case GAME_FREE: updateFree(); break;
+    case GAME_PONG: updatePong(); break;
+    case GAME_SNAKE: updateSnake(); break;
+    case GAME_BREAKOUT: updateBreakout(); break;
+    case GAME_INVADERS: updateInvaders(); break;
+    case GAME_ASTEROIDS: updateAsteroids(); break;
+    case GAME_FLAPPY: updateFlappy(); break;
+    case GAME_RACING: updateRacing(); break;
+    case GAME_MEMORY: updateMemory(); break;
+    case GAME_COINS: updateCoins(); break;
+  }
+}
+
+void drawCurrentGame() {
+  switch (currentGame) {
+    case GAME_DINO: drawDino(); break;
+    case GAME_BOXES: drawBoxes(); break;
+    case GAME_FREE: drawFree(); break;
+    case GAME_PONG: drawPong(); break;
+    case GAME_SNAKE: drawSnake(); break;
+    case GAME_BREAKOUT: drawBreakout(); break;
+    case GAME_INVADERS: drawInvaders(); break;
+    case GAME_ASTEROIDS: drawAsteroids(); break;
+    case GAME_FLAPPY: drawFlappy(); break;
+    case GAME_RACING: drawRacing(); break;
+    case GAME_MEMORY: drawMemory(); break;
+    case GAME_COINS: drawCoins(); break;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+  pinMode(JOY_BTN, INPUT_PULLUP);
+  analogReadResolution(12);
+  Wire.begin(OLED_SDA, OLED_SCL);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println("SSD1306 failed");
+    while (true) delay(1000);
+  }
+
+  randomSeed(micros());
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(22, 25);
+  display.print("POCKET ARCADE");
+  display.display();
+  delay(600);
+  lastFrame = millis();
+}
+
+void loop() {
+  serviceSerial();
+
+  unsigned long now = millis();
+  if (now - lastFrame < FRAME_TIME_MS) return;
+  lastFrame = now;
+
+  switch (state) {
+    case STATE_MENU:
+      updateMenu();
+      drawMenu();
+      break;
+    case STATE_PLAYING:
+      updateCurrentGame();
+      if (state == STATE_PLAYING) drawCurrentGame();
+      break;
+    case STATE_GAMEOVER:
+      updateGameOver();
+      drawGameOver();
+      break;
+    case STATE_WIFI:
+      state = STATE_MENU;
+      break;
+  }
+}
