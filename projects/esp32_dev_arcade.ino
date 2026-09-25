@@ -217,7 +217,7 @@ void updateMemory(); void drawMemory();
 void updateCoins(); void drawCoins();
 
 // USB Serial bridge for the local Pocket Arcade webpage.
-// The browser uses Web Serial at 74880 baud. Wi-Fi and Bluetooth are not used.
+// The browser intentionally decodes the USB/UART link at 74880 baud. The ESP32 application UART remains 115200; this matches the tested USB-UART bridge behaviour.
 static bool serialInputStream = false;
 static bool serialLastButton = false;
 static bool virtualButtonPulse = false;
@@ -1135,7 +1135,7 @@ void updateCurrentGame(){switch(currentGame){case GAME_DINO:updateDino();break;c
 void drawCurrentGame(){switch(currentGame){case GAME_DINO:drawDino();break;case GAME_BOXES:drawBoxes();break;case GAME_FREE:drawFree();break;case GAME_PONG:drawPong();break;case GAME_SNAKE:drawSnake();break;case GAME_BREAKOUT:drawBreakout();break;case GAME_INVADERS:drawInvaders();break;case GAME_ASTEROIDS:drawAsteroids();break;case GAME_FLAPPY:drawFlappy();break;case GAME_RACING:drawRacing();break;case GAME_MEMORY:drawMemory();break;case GAME_COINS:drawCoins();break;}}
 
 void setup() {
-  Serial.begin(74880);
+  Serial.begin(115200);
   delay(200);
   pinMode(JOY_BTN, INPUT_PULLUP);
   analogReadResolution(12);
