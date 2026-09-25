@@ -199,8 +199,7 @@ const char* gameNames[GAME_COUNT] = {
   "9. Flappy",
   "10. Racing",
   "11. Memory",
-  "12. Coin Collector",
-  "13. WEB PLAY"
+  "12. Coin Collector"
 };
 // -------------------- Timing --------------------
 unsigned long lastFrame = 0;
