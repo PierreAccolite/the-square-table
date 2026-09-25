@@ -23,8 +23,12 @@
  *   10. Racing
  *   11. Memory
  *   12. Coin Collector
+ *   13. Tetris
+ *   14. Lunar Lander
+ *   15. Frogger
+ *   16. Tron
  *
- * V3 adds:
+ * V4 adds:
  *   - Scrollable game menu
  *   - Explicit function prototypes
  *   - RAM high-score framework
@@ -63,10 +67,14 @@ enum GameType  {
   GAME_FLAPPY=8,
   GAME_RACING=9,
   GAME_MEMORY=10,
-  GAME_COINS=11
+  GAME_COINS=11,
+  GAME_TETRIS=12,
+  GAME_LUNAR=13,
+  GAME_FROGGER=14,
+  GAME_TRON=15
 };
 
-const int GAME_COUNT = 12;
+const int GAME_COUNT = 16;
 const int MENU_COUNT = GAME_COUNT;
 const int MENU_VISIBLE = 4;
 const unsigned long FRAME_TIME_MS = 30;
@@ -177,6 +185,18 @@ int coinPlayerX=64, coinPlayerY=32, coinScore=0;
 int coinsX[8], coinsY[8];
 bool coinsActive[8];
 
+
+// -------------------- Game 13 Tetris --------------------
+const int TETRIS_W=10,TETRIS_H=16; byte tetrisBoard[TETRIS_H][TETRIS_W];
+int tetrisPiece=0,tetrisRot=0,tetrisX=3,tetrisY=0,tetrisScore=0,tetrisLines=0; unsigned long tetrisLastDrop=0;
+const uint16_t tetrisShapes[7][4]={{0x0F00,0x2222,0x0F00,0x2222},{0x6600,0x6600,0x6600,0x6600},{0x6C00,0x4620,0x6C00,0x4620},{0xC600,0x2640,0xC600,0x2640},{0x8E00,0x4C40,0xE200,0x44C0},{0x2E00,0x4460,0xE800,0xC440},{0x4E00,0x4640,0xE400,0x4C40}};
+// -------------------- Game 14 Lunar Lander --------------------
+float lunarX=64,lunarY=20,lunarVX=0,lunarVY=0; int lunarFuel=100,lunarScore=0,lunarPadX=52,lunarPadW=24;
+// -------------------- Game 15 Frogger --------------------
+int frogX=64,frogY=56,frogScore=0,frogLives=3; struct FrogCar{int x,y,v;}; FrogCar frogCars[5];
+// -------------------- Game 16 Tron --------------------
+const int TRON_W=32,TRON_H=14; bool tronTrail[TRON_H][TRON_W]; int tronX=5,tronY=7,tronDX=1,tronDY=0,tronScore=0,tronEnemyX=26,tronEnemyY=6,tronEnemyDX=-1,tronEnemyDY=0;
+
 // Simple RAM high-score table. Persistent storage comes later.
 int highScores[GAME_COUNT] = {0};
 
@@ -194,7 +214,11 @@ const char* gameNames[MENU_COUNT] = {
   "9. Flappy",
   "10. Racing",
   "11. Memory",
-  "12. Coin Collector"
+  "12. Coin Collector",
+  "13. Tetris",
+  "14. Lunar Lander",
+  "15. Frogger",
+  "16. Tron"
 };
 // -------------------- Timing --------------------
 unsigned long lastFrame = 0;
@@ -216,6 +240,8 @@ void updateFlappy(); void drawFlappy();
 void updateRacing(); void drawRacing();
 void updateMemory(); void drawMemory();
 void updateCoins(); void drawCoins();
+void updateTetris(); void drawTetris(); void updateLunar(); void drawLunar();
+void updateFrogger(); void drawFrogger(); void updateTron(); void drawTron();
 
 // =====================================================
 //  JOYSTICK helpers (wide dead-zone)
@@ -280,7 +306,7 @@ void drawMenu() {
   display.setCursor(12, 0);
   display.print("POCKET ARCADE");
 
-  display.setCursor(101, 0);
+  display.setCursor(96, 0);
   display.print(menuSelection + 1);
   display.print("/");
   display.print(MENU_COUNT);
@@ -344,6 +370,10 @@ int currentScore() {
   if (currentGame == GAME_RACING) return raceScore;
   if (currentGame == GAME_MEMORY) return memoryScore;
   if (currentGame == GAME_COINS) return coinScore;
+  if (currentGame == GAME_TETRIS) return tetrisScore;
+  if (currentGame == GAME_LUNAR) return lunarScore;
+  if (currentGame == GAME_FROGGER) return frogScore;
+  if (currentGame == GAME_TRON) return tronScore;
   return 0;
 }
 
@@ -482,6 +512,10 @@ void startGame() {
     coinPlayerX=64; coinPlayerY=32; coinScore=0;
     for(int i=0;i<8;i++){ coinsActive[i]=true; coinsX[i]=random(8,120); coinsY[i]=random(14,54); }
   }
+  else if(currentGame==GAME_TETRIS){memset(tetrisBoard,0,sizeof(tetrisBoard));tetrisPiece=random(0,7);tetrisRot=0;tetrisX=3;tetrisY=0;tetrisScore=0;tetrisLines=0;tetrisLastDrop=millis();}
+  else if(currentGame==GAME_LUNAR){lunarX=64;lunarY=18;lunarVX=lunarVY=0;lunarFuel=100;lunarScore=0;lunarPadX=random(8,96);}
+  else if(currentGame==GAME_FROGGER){frogX=64;frogY=56;frogScore=0;frogLives=3;for(int i=0;i<5;i++){frogCars[i].x=random(0,128);frogCars[i].y=16+i*9;frogCars[i].v=(i&1)?-1:1;}}
+  else if(currentGame==GAME_TRON){memset(tronTrail,0,sizeof(tronTrail));tronX=5;tronY=7;tronDX=1;tronDY=0;tronEnemyX=26;tronEnemyY=6;tronEnemyDX=-1;tronEnemyDY=0;tronScore=0;}
 }
 
 // =====================================================
@@ -1344,6 +1378,24 @@ void drawCoins() {
   display.display();
 }
 
+
+// =====================================================
+//  GAMES 13-16
+// =====================================================
+bool tetCell(int p,int r,int x,int y){if(x<0||x>=4||y<0||y>=4)return false;return(tetrisShapes[p][r&3]>>(15-y*4-x))&1;}
+bool tetFit(int p,int r,int px,int py){for(int y=0;y<4;y++)for(int x=0;x<4;x++)if(tetCell(p,r,x,y)){int bx=px+x,by=py+y;if(bx<0||bx>=TETRIS_W||by>=TETRIS_H||tetrisBoard[by][bx])return false;}return true;}
+void tetLock(){for(int y=0;y<4;y++)for(int x=0;x<4;x++)if(tetCell(tetrisPiece,tetrisRot,x,y))tetrisBoard[tetrisY+y][tetrisX+x]=1;for(int y=TETRIS_H-1;y>=0;y--){bool full=true;for(int x=0;x<TETRIS_W;x++)if(!tetrisBoard[y][x])full=false;if(full){for(int yy=y;yy>0;yy--)for(int x=0;x<TETRIS_W;x++)tetrisBoard[yy][x]=tetrisBoard[yy-1][x];for(int x=0;x<TETRIS_W;x++)tetrisBoard[0][x]=0;tetrisLines++;tetrisScore+=10;y++;}}tetrisPiece=random(0,7);tetrisRot=0;tetrisX=3;tetrisY=0;if(!tetFit(tetrisPiece,0,3,0))enterGameOver();}
+void updateTetris(){static int lx=0,ly=0;int x=joyXDir(),y=joyYDir();if(x&&!lx&&tetFit(tetrisPiece,tetrisRot,tetrisX+x,tetrisY))tetrisX+=x;if(y<0&&!ly){int r=(tetrisRot+1)&3;if(tetFit(tetrisPiece,r,tetrisX,tetrisY))tetrisRot=r;}if(buttonPressed()){while(tetFit(tetrisPiece,tetrisRot,tetrisX,tetrisY+1))tetrisY++;tetLock();return;}lx=x;ly=y;int d=max(100,650-tetrisLines*20);if(millis()-tetrisLastDrop>d){tetrisLastDrop=millis();if(tetFit(tetrisPiece,tetrisRot,tetrisX,tetrisY+1))tetrisY++;else tetLock();}}
+void drawTetris(){display.clearDisplay();int ox=46,oy=8,b=4;display.drawRect(ox-1,oy-1,TETRIS_W*b+2,TETRIS_H*b+2,SSD1306_WHITE);for(int y=0;y<TETRIS_H;y++)for(int x=0;x<TETRIS_W;x++)if(tetrisBoard[y][x])display.fillRect(ox+x*b,oy+y*b,3,3,SSD1306_WHITE);for(int y=0;y<4;y++)for(int x=0;x<4;x++)if(tetCell(tetrisPiece,tetrisRot,x,y))display.fillRect(ox+(tetrisX+x)*b,oy+(tetrisY+y)*b,3,3,SSD1306_WHITE);display.setCursor(0,12);display.print("TETRIS");display.setCursor(0,25);display.print("S:");display.print(tetrisScore);display.setCursor(0,37);display.print("L:");display.print(tetrisLines);display.setCursor(0,50);display.print("BTN DROP");display.display();}
+
+void updateLunar(){int x=joyXDir(),y=joyYDir();lunarVX=constrain(lunarVX+x*.12f,-2.0f,2.0f);if(y<0&&lunarFuel>0){lunarVY-=.28f;lunarFuel--;}lunarVY+=.10f;lunarX+=lunarVX;lunarY+=lunarVY;if(lunarX<5)lunarX=123;if(lunarX>123)lunarX=5;if(lunarY>=54){if(lunarX>=lunarPadX&&lunarX<=lunarPadX+lunarPadW&&abs(lunarVY)<1.7){lunarScore+=20;lunarY=18;lunarVY=lunarVX=0;lunarFuel=min(100,lunarFuel+35);lunarPadX=random(8,96);}else enterGameOver();}}
+void drawLunar(){display.clearDisplay();display.drawLine(0,55,127,55,SSD1306_WHITE);display.fillRect(lunarPadX,53,lunarPadW,3,SSD1306_WHITE);display.drawTriangle((int)lunarX,(int)lunarY-5,(int)lunarX-4,(int)lunarY+4,(int)lunarX+4,(int)lunarY+4,SSD1306_WHITE);display.setCursor(0,0);display.print("S:");display.print(lunarScore);display.setCursor(42,0);display.print("F:");display.print(lunarFuel);display.setCursor(82,0);display.print("V:");display.print((int)(lunarVY*10));display.display();}
+
+void updateFrogger(){static int lx=0,ly=0;int x=joyXDir(),y=joyYDir();if(x&&!lx)frogX=constrain(frogX+x*8,4,123);if(y&&!ly)frogY=constrain(frogY+y*8,8,56);lx=x;ly=y;for(int i=0;i<5;i++){frogCars[i].x+=frogCars[i].v;if(frogCars[i].v>0&&frogCars[i].x>135)frogCars[i].x=-12;if(frogCars[i].v<0&&frogCars[i].x<-12)frogCars[i].x=135;if(abs(frogCars[i].x-frogX)<8&&abs(frogCars[i].y-frogY)<6){if(--frogLives<=0)enterGameOver();else{frogX=64;frogY=56;}return;}}if(frogY<12){frogScore++;frogX=64;frogY=56;}}
+void drawFrogger(){display.clearDisplay();for(int i=0;i<5;i++)display.fillRect(frogCars[i].x-5,frogCars[i].y-3,10,6,SSD1306_WHITE);display.fillRect(frogX-3,frogY-3,7,7,SSD1306_WHITE);display.setCursor(0,0);display.print("S:");display.print(frogScore);display.print(" L:");display.print(frogLives);display.display();}
+
+void updateTron(){int x=joyXDir(),y=joyYDir();if(x&&tronDX==0){tronDX=x;tronDY=0;}if(y&&tronDY==0){tronDX=0;tronDY=y;}int nx=tronX+tronDX,ny=tronY+tronDY;if(nx<0||nx>=TRON_W||ny<0||ny>=TRON_H||tronTrail[ny][nx]){enterGameOver();return;}tronTrail[tronY][tronX]=true;tronX=nx;tronY=ny;tronScore++;int ex=tronEnemyX+tronEnemyDX,ey=tronEnemyY+tronEnemyDY;if(ex<0||ex>=TRON_W||ey<0||ey>=TRON_H||tronTrail[ey][ex]){tronEnemyDX=random(-1,2);tronEnemyDY=0;if(!tronEnemyDX)tronEnemyDY=random(-1,2);if(!tronEnemyDX&&!tronEnemyDY)tronEnemyDY=1;}else{tronTrail[tronEnemyY][tronEnemyX]=true;tronEnemyX=ex;tronEnemyY=ey;}if(tronX==tronEnemyX&&tronY==tronEnemyY)enterGameOver();}
+void drawTron(){display.clearDisplay();display.drawRect(0,7,127,56,SSD1306_WHITE);for(int y=0;y<TRON_H;y++)for(int x=0;x<TRON_W;x++)if(tronTrail[y][x])display.fillRect(x*4,9+y*4,3,3,SSD1306_WHITE);display.fillRect(tronX*4,9+tronY*4,4,4,SSD1306_WHITE);display.drawRect(tronEnemyX*4,9+tronEnemyY*4,4,4,SSD1306_WHITE);display.setCursor(0,0);display.print("TRON S:");display.print(tronScore);display.display();}
 void updateCurrentGame() {
   switch (currentGame) {
     case GAME_DINO: updateDino(); break;
@@ -1358,6 +1410,10 @@ void updateCurrentGame() {
     case GAME_RACING: updateRacing(); break;
     case GAME_MEMORY: updateMemory(); break;
     case GAME_COINS: updateCoins(); break;
+    case GAME_TETRIS: updateTetris(); break;
+    case GAME_LUNAR: updateLunar(); break;
+    case GAME_FROGGER: updateFrogger(); break;
+    case GAME_TRON: updateTron(); break;
   }
 }
 
@@ -1375,6 +1431,10 @@ void drawCurrentGame() {
     case GAME_RACING: drawRacing(); break;
     case GAME_MEMORY: drawMemory(); break;
     case GAME_COINS: drawCoins(); break;
+    case GAME_TETRIS: drawTetris(); break;
+    case GAME_LUNAR: drawLunar(); break;
+    case GAME_FROGGER: drawFrogger(); break;
+    case GAME_TRON: drawTron(); break;
   }
 }
 
