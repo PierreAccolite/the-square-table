@@ -1,5 +1,8 @@
 const POCKET_ARCADE_BAUD=74880;
+const POCKET_ARCADE_LINE={dataBits:8,stopBits:1,parity:"none",bufferSize:4096,flowControl:"none"};
 let port=null,reader=null,writer=null,keepReading=false,receiveBuffer="";
+let decoder=new TextDecoder("utf-8");
+let lastPongAt=0;
 const serialState={x:0,y:0,button:0};
 
 const $=id=>document.getElementById(id);
@@ -24,7 +27,7 @@ async function sendLine(line){
 function handleSerialLine(line){
   if(!line)return;
   if(line.length<100)log("< "+line);
-  if(line==="PONG"){setLink(true);return;}
+  if(line==="PONG"){lastPongAt=performance.now();setLink(true);return;}
   if(line.startsWith("JOY,")){
     const p=line.split(",");
     if(p.length>=4){serialState.x=Number(p[1])||0;serialState.y=Number(p[2])||0;serialState.button=Number(p[3])||0;joy.x=serialState.x/100;joy.y=serialState.y/100;updateSerialStick();}
@@ -40,7 +43,8 @@ async function readLoop(){
         const {value,done}=await reader.read();
         if(done)break;
         if(value){
-          receiveBuffer+=new TextDecoder().decode(value);
+          receiveBuffer+=decoder.decode(value,{stream:true});
+          receiveBuffer=receiveBuffer.replace(/\0/g,"");
           let n;
           while((n=receiveBuffer.indexOf("\n"))>=0){handleSerialLine(receiveBuffer.slice(0,n).replace(/\r$/,""));receiveBuffer=receiveBuffer.slice(n+1);}
         }
@@ -53,14 +57,23 @@ async function connectSerial(){
   if(!("serial" in navigator)){setLink(false,true);log("Web Serial is not available. Use Chrome or Edge on desktop.");return;}
   try{
     port=await navigator.serial.requestPort();
-    await port.open({baudRate:POCKET_ARCADE_BAUD,dataBits:8,stopBits:1,parity:"none",bufferSize:4096,flowControl:"none"});
+    await port.open({baudRate:POCKET_ARCADE_BAUD,...POCKET_ARCADE_LINE});
     writer=port.writable.getWriter();keepReading=true;
     const info=port.getInfo();
     $("device").textContent="VID "+(info.usbVendorId??"—")+" / PID "+(info.usbProductId??"—");
-    $("connect").disabled=true;$("disconnect").disabled=false;setLink(true);log("CONNECTED @ "+POCKET_ARCADE_BAUD);
+    $("connect").disabled=true;$("disconnect").disabled=false;setLink(false);
+    log("CONNECTED @ "+POCKET_ARCADE_BAUD+" 8N1");
     readLoop();
-    await new Promise(r=>setTimeout(r,1800));
-    await sendLine("PING");await sendLine("INPUT");await sendLine("GAME,"+gameIndex);
+    await new Promise(r=>setTimeout(r,900));
+    await sendLine("PING");
+    await new Promise(r=>setTimeout(r,700));
+    if(!lastPongAt){
+      log("NO PONG @ "+POCKET_ARCADE_BAUD+" — check that esp32_dev_arcade.ino is flashed.");
+      setLink(false,true);
+      return;
+    }
+    await sendLine("INPUT");
+    await sendLine("GAME,"+gameIndex);
   }catch(e){log("CONNECT ERROR: "+e.name+": "+e.message);await disconnectSerial(false);}
 }
 async function disconnectSerial(show=true){
@@ -71,7 +84,11 @@ async function disconnectSerial(show=true){
   try{if(writer)writer.releaseLock();}catch(_){}
   writer=null;
   try{if(port)await port.close();}catch(_){}
-  port=null;$("connect").disabled=false;$("disconnect").disabled=true;$("device").textContent="No serial device selected";setLink(false);
+  port=null;
+  receiveBuffer="";
+  decoder=new TextDecoder("utf-8");
+  lastPongAt=0;
+  $("connect").disabled=false;$("disconnect").disabled=true;$("device").textContent="No serial device selected";setLink(false);
   if(show)log("DISCONNECTED");
 }
 async function chooseGame(i){
