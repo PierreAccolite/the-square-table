@@ -235,6 +235,8 @@ static bool virtualButtonPulse = false;
 // physical joystick remains usable when the webpage is sitting at center.
 static int remoteJoyX = 0;
 static int remoteJoyY = 0;
+static unsigned long lastRemoteControl = 0;
+static const unsigned long REMOTE_CONTROL_TIMEOUT_MS = 150;
 
 bool buttonPressed();
 int joyXDir();
@@ -350,6 +352,7 @@ void processSerialCommand(const String& command) {
     if (p1 > 0 && p2 > p1) {
       remoteJoyX = constrain(cmd.substring(5, p1).toInt(), -100, 100);
       remoteJoyY = constrain(cmd.substring(p1 + 1, p2).toInt(), -100, 100);
+      lastRemoteControl = millis();
       if (cmd.substring(p2 + 1).toInt() != 0)
         virtualButtonPulse = true;
     }
@@ -360,6 +363,14 @@ void processSerialCommand(const String& command) {
 void serviceSerial() {
   if (webMode && millis() - lastWebHeartbeat > WEB_TIMEOUT_MS) {
     exitWebMode();
+  }
+
+  // A browser/USB control packet is valid only briefly. If the webpage stops
+  // sending input (pointer release, tab change, cable issue, etc.), force the
+  // remote joystick back to center instead of leaving the last direction latched.
+  if (webMode && millis() - lastRemoteControl > REMOTE_CONTROL_TIMEOUT_MS) {
+    remoteJoyX = 0;
+    remoteJoyY = 0;
   }
 
   static String inputLine;
@@ -510,14 +521,12 @@ void drawMenu() {
 }
 
 void updateMenu() {
-  if (webMode) {
-    if (buttonPressed() && state == STATE_MENU) startGame();
-    return;
-  }
-
   static int lastDir = 0;
   int dir = joyYDir();
 
+  // Same edge-triggered menu behaviour as the physical OLED menu: one
+  // deliberate move changes one item, and holding the stick does not repeat
+  // every frame. In WEB mode the selection is also mirrored to the browser.
   if (dir != 0 && lastDir == 0) {
     menuSelection = constrain(menuSelection + dir, 0, MENU_COUNT - 1);
 
@@ -526,15 +535,30 @@ void updateMenu() {
 
     if (menuSelection >= menuTop + MENU_VISIBLE)
       menuTop = menuSelection - MENU_VISIBLE + 1;
+
+    if (webMode && menuSelection < GAME_COUNT) {
+      currentGame = (GameType)menuSelection;
+      Serial.print("GAME,");
+      Serial.println(menuSelection);
+    }
   }
 
   lastDir = dir;
 
   if (buttonPressed()) {
+    if (webMode) {
+      if (menuSelection < GAME_COUNT) {
+        currentGame = (GameType)menuSelection;
+        startGame();
+      }
+      return;
+    }
+
     if (menuSelection == GAME_COUNT) {
       enterWebMode();
       return;
     }
+
     currentGame = (GameType)menuSelection;
     startGame();
   }
@@ -615,6 +639,7 @@ void enterWebMode() {
   lastWebHeartbeat = millis();
   remoteJoyX = 0;
   remoteJoyY = 0;
+  lastRemoteControl = millis();
   virtualButtonPulse = false;
   state = STATE_MENU;
   menuSelection = currentGame;
@@ -625,6 +650,7 @@ void exitWebMode() {
   webMode = false;
   remoteJoyX = 0;
   remoteJoyY = 0;
+  lastRemoteControl = millis();
   virtualButtonPulse = false;
   state = STATE_MENU;
   menuSelection = constrain((int)currentGame, 0, GAME_COUNT - 1);
