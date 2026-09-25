@@ -6,6 +6,7 @@ let lastPongAt=0;
 let webModeAck=false;
 let lastWebHeartbeat=0;
 const serialState={x:0,y:0,button:0};
+let physicalJoy={x:0,y:0};
 
 const $=id=>document.getElementById(id);
 const log=message=>{const box=$("console");if(!box)return;box.textContent+=message+"\n";box.scrollTop=box.scrollHeight;};
@@ -35,7 +36,14 @@ function handleSerialLine(line){
   if(line==="WEB_MODE,OFF"){webModeAck=false;return;}
   if(line.startsWith("JOY,")){
     const p=line.split(",");
-    if(p.length>=4){serialState.x=Number(p[1])||0;serialState.y=Number(p[2])||0;serialState.button=Number(p[3])||0;joy.x=serialState.x/100;joy.y=serialState.y/100;updateSerialStick();}
+    if(p.length>=4){
+      serialState.x=Number(p[1])||0;
+      serialState.y=Number(p[2])||0;
+      serialState.button=Number(p[3])||0;
+      physicalJoy.x=serialState.x/100;
+      physicalJoy.y=serialState.y/100;
+      updateSerialStick();
+    }
   }
   if(line==="EVENT,BUTTON_DOWN"){keys.a=1;serialState.button=1;updateSerialStick();}
   if(line==="EVENT,BUTTON_UP"){keys.a=0;serialState.button=0;updateSerialStick();}
@@ -129,8 +137,10 @@ async function sendBrowserControl(force=false){
   const now=performance.now();
   if(!force && now-lastControlSent<50)return;
   lastControlSent=now;
-  const x=Math.max(-100,Math.min(100,Math.round((joy.x+(keys.right?1:0)-(keys.left?1:0))*100)));
-  const y=Math.max(-100,Math.min(100,Math.round((joy.y+(keys.down?1:0)-(keys.up?1:0))*100)));
+  const px=Math.abs(physicalJoy.x)>0.25?physicalJoy.x:0;
+  const py=Math.abs(physicalJoy.y)>0.25?physicalJoy.y:0;
+  const x=Math.max(-100,Math.min(100,Math.round((px+joy.x+(keys.right?1:0)-(keys.left?1:0))*100)));
+  const y=Math.max(-100,Math.min(100,Math.round((py+joy.y+(keys.down?1:0)-(keys.up?1:0))*100)));
   await sendLine("CTRL,"+x+","+y+",0");
 }
 setInterval(()=>{sendBrowserControl().catch(()=>{});},50);
@@ -184,7 +194,7 @@ const palette=['#4fffe1','#ff4fd8','#ffe66d','#7aa2ff'];
 function text(t,x,y,size=20,color='#dff'){ctx.font='800 '+size+'px monospace';ctx.fillStyle=color;ctx.fillText(t,x,y)}function clear(){ctx.fillStyle='#020507';ctx.fillRect(0,0,W,H);for(let y=0;y<H;y+=8){ctx.fillStyle=y%16?'#071116':'#08181c';ctx.fillRect(0,y,W,8)}}function box(x,y,w,h,c,glow=0){if(glow){ctx.shadowBlur=glow;ctx.shadowColor=c}ctx.fillStyle=c;ctx.fillRect(x,y,w,h);ctx.shadowBlur=0}function circle(x,y,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()}
 let d={x:130,y:390,vy:0,obs:[],t:0};let pong={px:80,py:210,by:270,vx:6,vy:4,ay:270};let snake={body:[[480,270],[460,270],[440,270]],dir:[1,0],food:[700,300],t:0};let ball={x:480,y:390,vx:5,vy:-5};let bricks=[];let inv={ship:480,shots:[],aliens:[],t:0};let ast={x:480,y:270,vx:0,vy:0,a:0,rocks:[]};let flap={y:270,vy:0,pipes:[],t:0};let race={x:480,y:430,road:0,cars:[]};let coins=[];
 function reset(){score=0;started=false;d={x:130,y:390,vy:0,obs:[],t:0};pong={px:80,py:210,by:270,vx:6,vy:4,ay:270};snake={body:[[480,270],[460,270],[440,270]],dir:[1,0],food:[700,300],t:0};ball={x:480,y:390,vx:5,vy:-5};bricks=[];for(let y=70;y<180;y+=27)for(let x=90;x<870;x+=62)bricks.push({x,y,w:52,h:17,on:1});inv={ship:480,shots:[],aliens:[],t:0};for(let y=80;y<210;y+=42)for(let x=150;x<850;x+=55)inv.aliens.push({x,y,on:1});ast={x:480,y:270,vx:0,vy:0,a:0,rocks:[]};for(let i=0;i<8;i++)ast.rocks.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,r:20+Math.random()*22});flap={y:270,vy:0,pipes:[],t:0};race={x:480,y:430,road:0,cars:[]};coins=[];for(let i=0;i<10;i++)coins.push({x:100+Math.random()*760,y:100+Math.random()*300,a:Math.random()*6});}
-function inputX(){return joy.x+(keys.right?1:0)-(keys.left?1:0)}function inputY(){return joy.y+(keys.down?1:0)-(keys.up?1:0)}
+function inputX(){const p=Math.abs(physicalJoy.x)>0.25?physicalJoy.x:0;return p+joy.x+(keys.right?1:0)-(keys.left?1:0)}function inputY(){const p=Math.abs(physicalJoy.y)>0.25?physicalJoy.y:0;return p+joy.y+(keys.down?1:0)-(keys.up?1:0)}
 function dino(dt){d.t+=dt;d.vy+=1500*dt;d.y+=d.vy*dt;if(d.y>390)d.y=390,d.vy=0;if(Math.random()<dt*.75)d.obs.push({x:W+30,w:25+Math.random()*25,h:35+Math.random()*45});d.obs.forEach(o=>o.x-=330*dt);d.obs=d.obs.filter(o=>o.x>-60);if(keys.a||keys.up){if(d.y>=390)d.vy=-610;keys.a=0}for(const o of d.obs)if(o.x<d.x+34&&o.x+o.w>d.x&&390-o.h<d.y+34)started=false;score+=dt*10;clear();box(d.x,d.y,34,34,palette[0],12);for(const o of d.obs)box(o.x,390-o.h,o.w,o.h,palette[1],8);text('DINO RUN',34,48,22,palette[0]);text('JUMP / A',780,48,14,'#9fb');}
 function boxes(dt){d.t+=dt;if(Math.random()<dt*1.2)d.obs.push({x:Math.random()*(W-40),y:-40,w:25+Math.random()*35,h:25+Math.random()*35,v:180+score*.2});d.x+=inputX()*350*dt;d.y+=inputY()*350*dt;d.x=Math.max(20,Math.min(W-50,d.x));d.y=Math.max(70,Math.min(H-50,d.y));d.obs.forEach(o=>o.y+=o.v*dt);d.obs=d.obs.filter(o=>o.y<H+50);for(const o of d.obs)if(d.x<o.x+o.w&&d.x+32>o.x&&d.y<o.y+o.h&&d.y+32>o.y)started=false;score+=dt*12;clear();box(d.x,d.y,32,32,palette[0],15);d.obs.forEach(o=>box(o.x,o.y,o.w,o.h,palette[1],10));text('DODGE',34,48,22,palette[0]);}
 function free(dt){d.t+=dt;d.x+=inputX()*380*dt;d.y+=inputY()*380*dt;d.x=Math.max(20,Math.min(W-40,d.x));d.y=Math.max(70,Math.min(H-40,d.y));if(Math.hypot(d.x-coins[0]?.x,d.y-coins[0]?.y)<35){score+=100;coins.shift();coins.push({x:40+Math.random()*880,y:90+Math.random()*380})}clear();box(d.x,d.y,30,30,palette[0],14);coins.forEach(c=>circle(c.x,c.y,9,palette[2]));text('FREE MODE',34,48,22,palette[0]);}
