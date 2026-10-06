@@ -2,7 +2,7 @@
  * ESP32 GARDEN CONTROLLER
  * Standalone day/night garden controller
  *
- * OLED: SSD1306 128x64 I2C
+ * OLED: SSD1306 128x32 I2C
  *
  * OLED: SDA GPIO21, SCL GPIO22
  * Joystick: X GPIO35, Y GPIO34, SW GPIO33
@@ -12,12 +12,10 @@
  *
  * Wi-Fi and Bluetooth are intentionally NOT used.
  *
- * Current UI:
- *   HOME     - static overview
- *   LIGHT    - light sensor details
- *   OUTPUTS  - garden light AUTO / ON / OFF
- *   BATTERY  - battery/uptime information
- *   SETTINGS - light threshold
+ * UI is designed specifically for a 128x32 OLED.
+ * The screen stays on the selected page; it only changes page
+ * when the joystick is moved. A direction must return to centre
+ * before another page move is accepted.
  *
  * Temperature/DHT support is intentionally left out for now.
  */
@@ -29,7 +27,7 @@
 #define OLED_SDA 21
 #define OLED_SCL 22
 #define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
+#define SCREEN_HEIGHT 32
 
 #define JOY_X 35
 #define JOY_Y 34
@@ -86,18 +84,21 @@ Page currentPage = PAGE_HOME;
 
 unsigned long lastSensorRead = 0;
 unsigned long lastDisplayUpdate = 0;
-unsigned long lastJoystickMove = 0;
 unsigned long lastButtonTime = 0;
 
 const unsigned long SENSOR_INTERVAL = 1000;
 const unsigned long DISPLAY_INTERVAL = 250;
-const unsigned long JOYSTICK_REPEAT = 350;
 const unsigned long BUTTON_DEBOUNCE = 300;
 
 bool lastButtonState = HIGH;
 
+// Joystick centre/dead-zone.
 const int JOY_CENTER = 2048;
 const int JOY_DEADZONE = 700;
+
+// A joystick direction is accepted once, then must return to centre.
+// This makes the menu deliberately static instead of scrolling.
+bool joystickReady = true;
 
 const char *modeName();
 
@@ -144,7 +145,7 @@ void readSensors() {
   }
 }
 
-void drawHeader(const char *title) {
+void drawTitle(const char *title, int pageNumber) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
@@ -152,69 +153,61 @@ void drawHeader(const char *title) {
   display.setCursor(0, 0);
   display.print(title);
 
-  display.setCursor(91, 0);
-  display.print(isDark ? "NIGHT" : "DAY");
+  display.setCursor(105, 0);
+  display.print(pageNumber);
+  display.print("/");
+  display.print(PAGE_COUNT);
 
-  display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+  display.drawLine(0, 8, 127, 8, SSD1306_WHITE);
+}
+
+void drawFooter(const char *text) {
+  display.setCursor(0, 24);
+  display.print(text);
 }
 
 void drawHome() {
-  drawHeader("GARDEN CTRL");
+  drawTitle("GARDEN", 1);
 
-  display.setCursor(0, 16);
+  display.setCursor(0, 11);
   display.print("LIGHT ");
   display.print(lightRaw);
 
-  display.setCursor(0, 29);
-  display.print("STATE ");
-  display.print(isDark ? "DARK" : "LIGHT");
-
-  display.setCursor(0, 42);
-  display.print("GARDEN ");
-  display.print(gardenLights ? "ON" : "OFF");
-
-  display.setCursor(78, 42);
+  display.setCursor(0, 19);
+  display.print(gardenLights ? "LAMP ON " : "LAMP OFF ");
   display.print(modeName());
 
-  display.setCursor(0, 56);
-  display.print("< / > MENU   PRESS");
+  drawFooter("^v MENU  PRESS");
 }
 
 void drawLightPage() {
-  drawHeader("LIGHT SENSOR");
+  drawTitle("LIGHT", 2);
 
-  display.setCursor(0, 17);
-  display.print("RAW: ");
+  display.setCursor(0, 11);
+  display.print("RAW ");
   display.print(lightRaw);
-
-  display.setCursor(0, 30);
-  display.print("THR: ");
+  display.print("  THR ");
   display.print(darkThreshold);
 
-  display.setCursor(0, 43);
-  display.print("STATE: ");
+  display.setCursor(0, 19);
+  display.print("STATE ");
   display.print(isDark ? "DARK" : "LIGHT");
 
-  display.setCursor(0, 56);
-  display.print("L/R: threshold");
+  drawFooter("^v MENU  X +/-");
 }
 
 void drawOutputsPage() {
-  drawHeader("OUTPUTS");
+  drawTitle("OUTPUTS", 3);
 
-  display.setCursor(0, 17);
-  display.print("Garden: ");
-  display.print(gardenLights ? "ON" : "OFF");
-
-  display.setCursor(0, 30);
-  display.print("Mode:   ");
+  display.setCursor(0, 11);
+  display.print("GARDEN ");
+  display.print(gardenLights ? "ON " : "OFF");
   display.print(modeName());
 
-  display.setCursor(0, 43);
-  display.print("Irrig:  OFF");
+  display.setCursor(0, 19);
+  display.print("IRRIG OFF");
 
-  display.setCursor(0, 56);
-  display.print("PRESS: AUTO/ON/OFF");
+  drawFooter("PRESS = AUTO/ON/OFF");
 }
 
 float readBatteryVoltage() {
@@ -228,25 +221,23 @@ float readBatteryVoltage() {
 }
 
 void drawBatteryPage() {
-  drawHeader("BATTERY");
+  drawTitle("BATTERY", 4);
 
   float batteryVoltage = readBatteryVoltage();
 
-  display.setCursor(0, 17);
-  display.print("Voltage: ");
+  display.setCursor(0, 11);
+  display.print("POWER BATTERY");
 
+  display.setCursor(0, 19);
+  display.print("VOLT ");
   if (isnan(batteryVoltage)) {
-    display.print("NOT SENSED");
+    display.print("N/S");
   } else {
     display.print(batteryVoltage, 2);
-    display.print(" V");
+    display.print("V");
   }
 
-  display.setCursor(0, 31);
-  display.print("Power:   BATTERY");
-
-  display.setCursor(0, 44);
-  display.print("Uptime:  ");
+  drawFooter("UP ");
   unsigned long seconds = millis() / 1000UL;
   unsigned long minutes = seconds / 60UL;
   unsigned long hours = minutes / 60UL;
@@ -254,26 +245,23 @@ void drawBatteryPage() {
   display.print("h ");
   display.print(minutes % 60UL);
   display.print("m");
-
-  display.setCursor(0, 57);
-  display.print("Battery sense pending");
 }
 
 void drawSettingsPage() {
-  drawHeader("SETTINGS");
+  drawTitle("SETTINGS", 5);
 
-  display.setCursor(0, 17);
-  display.print("Dark threshold:");
-
-  display.setCursor(0, 30);
+  display.setCursor(0, 11);
+  display.print("THR ");
   display.print(darkThreshold);
 
-  display.setCursor(0, 43);
-  display.print("Hysteresis: ");
+  display.setCursor(70, 11);
+  display.print("HYS ");
   display.print(lightHysteresis);
 
-  display.setCursor(0, 56);
-  display.print("L/R: threshold");
+  display.setCursor(0, 19);
+  display.print("X -/+ THRESHOLD");
+
+  drawFooter("^v MENU");
 }
 
 void drawDisplay() {
@@ -285,7 +273,10 @@ void drawDisplay() {
     case PAGE_OUTPUTS:  drawOutputsPage(); break;
     case PAGE_BATTERY:  drawBatteryPage(); break;
     case PAGE_SETTINGS: drawSettingsPage(); break;
-    default:            currentPage = PAGE_HOME; drawHome(); break;
+    default:
+      currentPage = PAGE_HOME;
+      drawHome();
+      break;
   }
 
   display.display();
@@ -301,32 +292,43 @@ void nextPage(int direction) {
 }
 
 void handleJoystick() {
-  unsigned long now = millis();
-
-  // Only accept a joystick direction at a controlled interval.
-  // This prevents the menu from flying through several pages.
-  if (now - lastJoystickMove < JOYSTICK_REPEAT) return;
-
   int x = analogRead(JOY_X);
   int y = analogRead(JOY_Y);
 
-  if (y < JOY_CENTER - JOY_DEADZONE) {
+  bool xLeft  = x < JOY_CENTER - JOY_DEADZONE;
+  bool xRight = x > JOY_CENTER + JOY_DEADZONE;
+  bool yUp    = y < JOY_CENTER - JOY_DEADZONE;
+  bool yDown  = y > JOY_CENTER + JOY_DEADZONE;
+
+  // Require the stick to return to centre before another movement.
+  if (!xLeft && !xRight && !yUp && !yDown) {
+    joystickReady = true;
+    return;
+  }
+
+  if (!joystickReady) return;
+
+  if (yUp) {
     nextPage(-1);
-    lastJoystickMove = now;
-  } else if (y > JOY_CENTER + JOY_DEADZONE) {
+    joystickReady = false;
+    return;
+  }
+
+  if (yDown) {
     nextPage(1);
-    lastJoystickMove = now;
+    joystickReady = false;
+    return;
   }
 
   if (currentPage == PAGE_LIGHT || currentPage == PAGE_SETTINGS) {
-    if (x < JOY_CENTER - JOY_DEADZONE) {
+    if (xLeft) {
       darkThreshold -= 50;
       if (darkThreshold < 100) darkThreshold = 100;
-      lastJoystickMove = now;
-    } else if (x > JOY_CENTER + JOY_DEADZONE) {
+      joystickReady = false;
+    } else if (xRight) {
       darkThreshold += 50;
       if (darkThreshold > 4000) darkThreshold = 4000;
-      lastJoystickMove = now;
+      joystickReady = false;
     }
   }
 }
@@ -391,8 +393,7 @@ void setup() {
       display.setTextSize(1);
       display.setTextColor(SSD1306_WHITE);
       display.setCursor(0, 0);
-      display.println("GARDEN CONTROLLER");
-      display.println();
+      display.println("GARDEN CTRL");
       display.println("Starting...");
       display.display();
       delay(1000);
@@ -427,6 +428,7 @@ void loop() {
     Serial.println(modeName());
   }
 
+  // Refresh data, but never automatically change pages.
   if (now - lastDisplayUpdate >= DISPLAY_INTERVAL) {
     lastDisplayUpdate = now;
     drawDisplay();
