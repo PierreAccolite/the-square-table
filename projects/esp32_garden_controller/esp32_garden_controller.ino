@@ -5,18 +5,13 @@
  * OLED: SSD1306 128x32 I2C
  *
  * OLED: SDA GPIO21, SCL GPIO22
- * Joystick: X GPIO35, Y GPIO34, SW GPIO33
- * Light sensor: GPIO32 (ADC1) - connect the module's AO pin here
- * Garden relay: GPIO25
- * Irrigation relay: GPIO26 (reserved)
+ * Joystick: X GPIO32, Y GPIO33, SW GPIO25
+ * Light sensor: GPIO34 (ADC1) - connect module AO here
+ * Garden relay: GPIO26
+ * Irrigation relay: GPIO27 (reserved)
  *
  * Wi-Fi and Bluetooth are intentionally NOT used.
- *
  * UI is designed specifically for a 128x32 OLED.
- * The screen stays on the selected page and only changes when
- * the joystick is deliberately moved.
- *
- * Temperature/DHT support is intentionally left out for now.
  */
 
 #include <Wire.h>
@@ -28,22 +23,22 @@
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 32
 
-#define JOY_X 35
-#define JOY_Y 34
-#define JOY_BTN 33
+// These are the pins from your known-working joystick sketch.
+#define JOY_X 32
+#define JOY_Y 33
+#define JOY_BTN 25
 
-#define LIGHT_PIN 32
+// ESP32 ADC1 input, now moved off the joystick pins.
+#define LIGHT_PIN 34
 
-#define GARDEN_RELAY 25
-#define IRRIGATION_RELAY 26
+#define GARDEN_RELAY 26
+#define IRRIGATION_RELAY 27
 
-// Most common relay modules are active LOW.
 #define RELAY_ON LOW
 #define RELAY_OFF HIGH
 
-// Battery sensing deliberately disabled until the board's battery
-// sense circuit is identified. Do NOT connect the battery directly
-// to an ESP32 ADC pin.
+// Battery sensing remains disabled until the board's battery circuit
+// is identified. Never connect the battery directly to an ADC pin.
 #define BATTERY_SENSE_PIN -1
 #define BATTERY_DIVIDER_RATIO 2.0f
 
@@ -58,12 +53,7 @@ int lightRaw = 0;
 bool isDark = false;
 bool gardenLights = false;
 
-enum ControlMode {
-  MODE_AUTO,
-  MODE_FORCE_ON,
-  MODE_FORCE_OFF
-};
-
+enum ControlMode { MODE_AUTO, MODE_FORCE_ON, MODE_FORCE_OFF };
 ControlMode gardenMode = MODE_AUTO;
 
 enum Page {
@@ -84,22 +74,19 @@ unsigned long lastJoystickDebug = 0;
 
 const unsigned long SENSOR_INTERVAL = 1000;
 const unsigned long DISPLAY_INTERVAL = 250;
-const unsigned long BUTTON_DEBOUNCE = 300;
+const unsigned long BUTTON_DEBOUNCE = 100;
 const unsigned long JOYSTICK_DEBUG_INTERVAL = 1000;
 
-// Joystick calibration.
-// The joystick is normally around 2048 on a 12-bit ESP32 ADC,
-// but modules/boards can have a different centre. We capture the
-// actual centre at startup.
-int joyCenterX = 2048;
-int joyCenterY = 2048;
+// Your working joystick sketch showed these centres.
+// We use them as the initial calibration rather than assuming 2048.
+int joyCenterX = 2870;
+int joyCenterY = 2780;
 
-const int JOY_DEADZONE = 650;
+const int JOY_DEADZONE = 300;
 
-// A direction is accepted once. The stick must return to centre
-// before another movement is accepted.
+// One movement = one page. Stick must return to centre before
+// another movement is accepted.
 bool joystickReady = true;
-
 bool lastButtonState = HIGH;
 
 const char *modeName();
@@ -110,13 +97,9 @@ bool i2cDeviceExists(uint8_t address) {
 }
 
 void findOLED() {
-  if (i2cDeviceExists(0x3C)) {
-    oledAddress = 0x3C;
-  } else if (i2cDeviceExists(0x3D)) {
-    oledAddress = 0x3D;
-  } else {
-    oledAddress = 0;
-  }
+  if (i2cDeviceExists(0x3C)) oledAddress = 0x3C;
+  else if (i2cDeviceExists(0x3D)) oledAddress = 0x3D;
+  else oledAddress = 0;
 }
 
 void setGardenRelay(bool on) {
@@ -129,7 +112,6 @@ void setIrrigationRelay(bool on) {
 }
 
 void readSensors() {
-  // The photoresistor module's analogue output (AO) goes to GPIO32.
   lightRaw = analogRead(LIGHT_PIN);
 
   if (!isDark) {
@@ -138,58 +120,29 @@ void readSensors() {
     if (lightRaw > darkThreshold + lightHysteresis) isDark = false;
   }
 
-  if (gardenMode == MODE_AUTO) {
-    setGardenRelay(isDark);
-  } else if (gardenMode == MODE_FORCE_ON) {
-    setGardenRelay(true);
-  } else {
-    setGardenRelay(false);
-  }
-}
-
-void calibrateJoystick() {
-  // Keep the stick centred during startup.
-  long totalX = 0;
-  long totalY = 0;
-
-  for (int i = 0; i < 40; i++) {
-    totalX += analogRead(JOY_X);
-    totalY += analogRead(JOY_Y);
-    delay(5);
-  }
-
-  joyCenterX = totalX / 40;
-  joyCenterY = totalY / 40;
-
-  Serial.print("Joystick centre X=");
-  Serial.print(joyCenterX);
-  Serial.print(" Y=");
-  Serial.println(joyCenterY);
+  if (gardenMode == MODE_AUTO) setGardenRelay(isDark);
+  else if (gardenMode == MODE_FORCE_ON) setGardenRelay(true);
+  else setGardenRelay(false);
 }
 
 void drawTitle(const char *title, int pageNumber) {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-
   display.setCursor(0, 0);
   display.print(title);
-
   display.setCursor(105, 0);
   display.print(pageNumber);
   display.print("/");
   display.print(PAGE_COUNT);
-
   display.drawLine(0, 8, 127, 8, SSD1306_WHITE);
 }
 
 void drawHome() {
   drawTitle("GARDEN", 1);
-
   display.setCursor(0, 11);
   display.print("LIGHT ");
   display.print(lightRaw);
-
   display.setCursor(0, 19);
   display.print(gardenLights ? "LAMP ON " : "LAMP OFF ");
   display.print(modeName());
@@ -197,15 +150,12 @@ void drawHome() {
 
 void drawLightPage() {
   drawTitle("LIGHT", 2);
-
   display.setCursor(0, 11);
   display.print("RAW ");
   display.print(lightRaw);
-
   display.setCursor(72, 11);
   display.print("THR ");
   display.print(darkThreshold);
-
   display.setCursor(0, 19);
   display.print("STATE ");
   display.print(isDark ? "DARK" : "LIGHT");
@@ -213,12 +163,10 @@ void drawLightPage() {
 
 void drawOutputsPage() {
   drawTitle("OUTPUTS", 3);
-
   display.setCursor(0, 11);
   display.print("GARDEN ");
   display.print(gardenLights ? "ON " : "OFF");
   display.print(modeName());
-
   display.setCursor(0, 19);
   display.print("IRRIG OFF");
 }
@@ -235,17 +183,13 @@ float readBatteryVoltage() {
 
 void drawBatteryPage() {
   drawTitle("BATTERY", 4);
-
   float batteryVoltage = readBatteryVoltage();
-
   display.setCursor(0, 11);
   display.print("POWER BATTERY");
-
   display.setCursor(0, 19);
   display.print("VOLT ");
-  if (isnan(batteryVoltage)) {
-    display.print("N/S");
-  } else {
+  if (isnan(batteryVoltage)) display.print("N/S");
+  else {
     display.print(batteryVoltage, 2);
     display.print("V");
   }
@@ -253,15 +197,12 @@ void drawBatteryPage() {
 
 void drawSettingsPage() {
   drawTitle("SETTINGS", 5);
-
   display.setCursor(0, 11);
   display.print("THR ");
   display.print(darkThreshold);
-
   display.setCursor(70, 11);
   display.print("HYS ");
   display.print(lightHysteresis);
-
   display.setCursor(0, 19);
   display.print("LIGHT THRESHOLD");
 }
@@ -270,10 +211,10 @@ void drawDisplay() {
   if (!oledAddress) return;
 
   switch (currentPage) {
-    case PAGE_HOME:     drawHome(); break;
-    case PAGE_LIGHT:    drawLightPage(); break;
-    case PAGE_OUTPUTS:  drawOutputsPage(); break;
-    case PAGE_BATTERY:  drawBatteryPage(); break;
+    case PAGE_HOME: drawHome(); break;
+    case PAGE_LIGHT: drawLightPage(); break;
+    case PAGE_OUTPUTS: drawOutputsPage(); break;
+    case PAGE_BATTERY: drawBatteryPage(); break;
     case PAGE_SETTINGS: drawSettingsPage(); break;
     default:
       currentPage = PAGE_HOME;
@@ -286,10 +227,8 @@ void drawDisplay() {
 
 void nextPage(int direction) {
   int page = (int)currentPage + direction;
-
   if (page < 0) page = PAGE_COUNT - 1;
   if (page >= PAGE_COUNT) page = 0;
-
   currentPage = (Page)page;
 
   Serial.print("MENU -> ");
@@ -305,11 +244,8 @@ void handleJoystick() {
   int dx = x - joyCenterX;
   int dy = y - joyCenterY;
 
-  bool centred =
-    abs(dx) < JOY_DEADZONE &&
-    abs(dy) < JOY_DEADZONE;
+  bool centred = abs(dx) < JOY_DEADZONE && abs(dy) < JOY_DEADZONE;
 
-  // Re-arm only after the stick has actually returned to centre.
   if (centred) {
     joystickReady = true;
     return;
@@ -317,27 +253,25 @@ void handleJoystick() {
 
   if (!joystickReady) return;
 
-  // Whichever axis is moved furthest wins.
-  // This also makes the control tolerant if X/Y are physically swapped.
+  // Vertical movement controls pages.
   if (abs(dy) > abs(dx)) {
     if (dy < -JOY_DEADZONE) {
       nextPage(-1);
       joystickReady = false;
       return;
     }
-
     if (dy > JOY_DEADZONE) {
       nextPage(1);
       joystickReady = false;
       return;
     }
-  } else {
+  }
+
+  // Horizontal movement changes the light threshold only where useful.
+  if (abs(dx) >= abs(dy)) {
     if (dx < -JOY_DEADZONE) {
-      // Horizontal joystick movement adjusts the light threshold
-      // only on pages where that setting makes sense.
       if (currentPage == PAGE_LIGHT || currentPage == PAGE_SETTINGS) {
-        darkThreshold -= 50;
-        if (darkThreshold < 100) darkThreshold = 100;
+        darkThreshold = max(100, darkThreshold - 50);
         Serial.print("Threshold=");
         Serial.println(darkThreshold);
       }
@@ -347,8 +281,7 @@ void handleJoystick() {
 
     if (dx > JOY_DEADZONE) {
       if (currentPage == PAGE_LIGHT || currentPage == PAGE_SETTINGS) {
-        darkThreshold += 50;
-        if (darkThreshold > 4000) darkThreshold = 4000;
+        darkThreshold = min(4000, darkThreshold + 50);
         Serial.print("Threshold=");
         Serial.println(darkThreshold);
       }
@@ -368,13 +301,9 @@ void handleJoystickButton() {
     lastButtonTime = now;
 
     if (currentPage == PAGE_OUTPUTS) {
-      if (gardenMode == MODE_AUTO) {
-        gardenMode = MODE_FORCE_ON;
-      } else if (gardenMode == MODE_FORCE_ON) {
-        gardenMode = MODE_FORCE_OFF;
-      } else {
-        gardenMode = MODE_AUTO;
-      }
+      if (gardenMode == MODE_AUTO) gardenMode = MODE_FORCE_ON;
+      else if (gardenMode == MODE_FORCE_ON) gardenMode = MODE_FORCE_OFF;
+      else gardenMode = MODE_AUTO;
 
       readSensors();
 
@@ -389,6 +318,7 @@ void handleJoystickButton() {
 void printDiagnostics() {
   int x = analogRead(JOY_X);
   int y = analogRead(JOY_Y);
+  int button = digitalRead(JOY_BTN);
 
   Serial.print("LIGHT=");
   Serial.print(lightRaw);
@@ -397,7 +327,7 @@ void printDiagnostics() {
   Serial.print("  JOY_Y=");
   Serial.print(y);
   Serial.print("  BTN=");
-  Serial.print(digitalRead(JOY_BTN));
+  Serial.print(button);
   Serial.print("  PAGE=");
   Serial.print((int)currentPage + 1);
   Serial.print("/");
@@ -421,8 +351,6 @@ void setup() {
 
   pinMode(GARDEN_RELAY, OUTPUT);
   pinMode(IRRIGATION_RELAY, OUTPUT);
-
-  // Safe startup: outputs OFF.
   setGardenRelay(false);
   setIrrigationRelay(false);
 
@@ -430,7 +358,8 @@ void setup() {
 
   analogReadResolution(12);
 
-  // GPIO32 is ADC1 and is suitable for analogue light sensing.
+  pinMode(JOY_X, INPUT);
+  pinMode(JOY_Y, INPUT);
   pinMode(LIGHT_PIN, INPUT);
 
   Wire.begin(OLED_SDA, OLED_SCL);
@@ -457,14 +386,18 @@ void setup() {
     Serial.println("No SSD1306 OLED found at 0x3C/0x3D.");
   }
 
-  // IMPORTANT: leave the joystick centred during this calibration.
-  calibrateJoystick();
+  // Show the actual joystick centre at startup.
+  Serial.print("Joystick centre X=");
+  Serial.print(joyCenterX);
+  Serial.print(" Y=");
+  Serial.println(joyCenterY);
 
   readSensors();
   drawDisplay();
 
   Serial.println("Controller ready.");
-  Serial.println("Move joystick and watch JOY_X / JOY_Y values.");
+  Serial.println("Known-good joystick pins: X32 Y33 BTN25");
+  Serial.println("Light sensor AO: GPIO34");
 }
 
 void loop() {
@@ -493,8 +426,8 @@ void loop() {
 
 const char *modeName() {
   switch (gardenMode) {
-    case MODE_AUTO:      return "AUTO";
-    case MODE_FORCE_ON:  return "ON";
+    case MODE_AUTO: return "AUTO";
+    case MODE_FORCE_ON: return "ON";
     case MODE_FORCE_OFF: return "OFF";
   }
   return "?";
