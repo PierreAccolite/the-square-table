@@ -2,23 +2,29 @@
  * ESP32 GARDEN CONTROLLER
  * Standalone day/night garden controller
  *
- * ESP32 Dev Module / classic ESP32-WROOM style board
  * OLED: SSD1306 128x64 I2C
  *
  * OLED: SDA GPIO21, SCL GPIO22
  * Joystick: X GPIO35, Y GPIO34, SW GPIO33
  * Light sensor: GPIO32 (ADC1)
- * DHT11: GPIO27
  * Garden relay: GPIO25
  * Irrigation relay: GPIO26 (reserved)
  *
  * Wi-Fi and Bluetooth are intentionally NOT used.
+ *
+ * Current UI:
+ *   HOME     - static overview
+ *   LIGHT    - light sensor details
+ *   OUTPUTS  - garden light AUTO / ON / OFF
+ *   BATTERY  - battery/uptime information
+ *   SETTINGS - light threshold
+ *
+ * Temperature/DHT support is intentionally left out for now.
  */
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <DHT.h>
 
 #define OLED_SDA 21
 #define OLED_SCL 22
@@ -30,8 +36,6 @@
 #define JOY_BTN 33
 
 #define LIGHT_PIN 32
-#define DHT_PIN 27
-#define DHT_TYPE DHT11
 
 #define GARDEN_RELAY 25
 #define IRRIGATION_RELAY 26
@@ -40,8 +44,16 @@
 #define RELAY_ON LOW
 #define RELAY_OFF HIGH
 
+// IMPORTANT:
+// Battery voltage cannot safely be measured directly by an ESP32 ADC pin.
+// This is left disabled until the exact ESP32 board/battery-sense circuit
+// is identified. Do NOT connect the battery directly to an ADC pin.
+#define BATTERY_SENSE_PIN -1
+
+// Set this only after a proper resistor-divider/battery-sense input is confirmed.
+#define BATTERY_DIVIDER_RATIO 2.0f
+
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
-DHT dht(DHT_PIN, DHT_TYPE);
 
 uint8_t oledAddress = 0;
 
@@ -49,8 +61,6 @@ int darkThreshold = 1500;
 int lightHysteresis = 150;
 
 int lightRaw = 0;
-float temperatureC = NAN;
-float humidity = NAN;
 
 bool isDark = false;
 bool gardenLights = false;
@@ -66,25 +76,30 @@ ControlMode gardenMode = MODE_AUTO;
 enum Page {
   PAGE_HOME,
   PAGE_LIGHT,
-  PAGE_TEMP,
   PAGE_OUTPUTS,
-  PAGE_SETTINGS
+  PAGE_BATTERY,
+  PAGE_SETTINGS,
+  PAGE_COUNT
 };
 
 Page currentPage = PAGE_HOME;
 
 unsigned long lastSensorRead = 0;
 unsigned long lastDisplayUpdate = 0;
+unsigned long lastJoystickMove = 0;
 unsigned long lastButtonTime = 0;
 
-const unsigned long SENSOR_INTERVAL = 2000;
-const unsigned long DISPLAY_INTERVAL = 150;
+const unsigned long SENSOR_INTERVAL = 1000;
+const unsigned long DISPLAY_INTERVAL = 250;
+const unsigned long JOYSTICK_REPEAT = 350;
 const unsigned long BUTTON_DEBOUNCE = 300;
 
 bool lastButtonState = HIGH;
 
 const int JOY_CENTER = 2048;
 const int JOY_DEADZONE = 700;
+
+const char *modeName();
 
 bool i2cDeviceExists(uint8_t address) {
   Wire.beginTransmission(address);
@@ -112,12 +127,6 @@ void setIrrigationRelay(bool on) {
 
 void readSensors() {
   lightRaw = analogRead(LIGHT_PIN);
-
-  float newTemp = dht.readTemperature();
-  float newHumidity = dht.readHumidity();
-
-  if (!isnan(newTemp)) temperatureC = newTemp;
-  if (!isnan(newHumidity)) humidity = newHumidity;
 
   // Hysteresis prevents relay chatter around the threshold.
   if (!isDark) {
@@ -152,83 +161,42 @@ void drawHeader(const char *title) {
 void drawHome() {
   drawHeader("GARDEN CTRL");
 
-  display.setCursor(0, 15);
-  display.print("Light: ");
+  display.setCursor(0, 16);
+  display.print("LIGHT ");
   display.print(lightRaw);
 
-  display.setCursor(0, 27);
-  display.print("Temp : ");
-  if (isnan(temperatureC)) display.print("--");
-  else {
-    display.print(temperatureC, 1);
-    display.print(" C");
-  }
+  display.setCursor(0, 29);
+  display.print("STATE ");
+  display.print(isDark ? "DARK" : "LIGHT");
 
-  display.setCursor(0, 39);
-  display.print("Hum  : ");
-  if (isnan(humidity)) display.print("--");
-  else {
-    display.print(humidity, 0);
-    display.print("%");
-  }
-
-  display.setCursor(0, 51);
-  display.print("Garden: ");
+  display.setCursor(0, 42);
+  display.print("GARDEN ");
   display.print(gardenLights ? "ON" : "OFF");
 
-  display.setCursor(89, 51);
+  display.setCursor(78, 42);
   display.print(modeName());
+
+  display.setCursor(0, 56);
+  display.print("< / > MENU   PRESS");
 }
 
 void drawLightPage() {
   drawHeader("LIGHT SENSOR");
 
-  display.setCursor(0, 16);
+  display.setCursor(0, 17);
   display.print("RAW: ");
   display.print(lightRaw);
 
-  display.setCursor(0, 29);
+  display.setCursor(0, 30);
   display.print("THR: ");
   display.print(darkThreshold);
 
-  display.setCursor(0, 42);
+  display.setCursor(0, 43);
   display.print("STATE: ");
   display.print(isDark ? "DARK" : "LIGHT");
 
-  display.setCursor(0, 55);
+  display.setCursor(0, 56);
   display.print("L/R: threshold");
-}
-
-void drawTempPage() {
-  drawHeader("TEMPERATURE");
-
-  display.setCursor(0, 17);
-  display.print("Temp: ");
-  if (isnan(temperatureC)) display.print("NO DATA");
-  else {
-    display.print(temperatureC, 1);
-    display.print(" C");
-  }
-
-  display.setCursor(0, 31);
-  display.print("Humidity: ");
-  if (isnan(humidity)) display.print("NO DATA");
-  else {
-    display.print(humidity, 0);
-    display.print("%");
-  }
-
-  display.setCursor(0, 48);
-  display.print("DHT11");
-}
-
-const char *modeName() {
-  switch (gardenMode) {
-    case MODE_AUTO: return "AUTO";
-    case MODE_FORCE_ON: return "ON";
-    case MODE_FORCE_OFF: return "OFF";
-  }
-  return "?";
 }
 
 void drawOutputsPage() {
@@ -246,7 +214,49 @@ void drawOutputsPage() {
   display.print("Irrig:  OFF");
 
   display.setCursor(0, 56);
-  display.print("PRESS: change mode");
+  display.print("PRESS: AUTO/ON/OFF");
+}
+
+float readBatteryVoltage() {
+#if BATTERY_SENSE_PIN >= 0
+  int raw = analogRead(BATTERY_SENSE_PIN);
+  float pinVoltage = ((float)raw / 4095.0f) * 3.3f;
+  return pinVoltage * BATTERY_DIVIDER_RATIO;
+#else
+  return NAN;
+#endif
+}
+
+void drawBatteryPage() {
+  drawHeader("BATTERY");
+
+  float batteryVoltage = readBatteryVoltage();
+
+  display.setCursor(0, 17);
+  display.print("Voltage: ");
+
+  if (isnan(batteryVoltage)) {
+    display.print("NOT SENSED");
+  } else {
+    display.print(batteryVoltage, 2);
+    display.print(" V");
+  }
+
+  display.setCursor(0, 31);
+  display.print("Power:   BATTERY");
+
+  display.setCursor(0, 44);
+  display.print("Uptime:  ");
+  unsigned long seconds = millis() / 1000UL;
+  unsigned long minutes = seconds / 60UL;
+  unsigned long hours = minutes / 60UL;
+  display.print(hours);
+  display.print("h ");
+  display.print(minutes % 60UL);
+  display.print("m");
+
+  display.setCursor(0, 57);
+  display.print("Battery sense pending");
 }
 
 void drawSettingsPage() {
@@ -270,11 +280,12 @@ void drawDisplay() {
   if (!oledAddress) return;
 
   switch (currentPage) {
-    case PAGE_HOME: drawHome(); break;
-    case PAGE_LIGHT: drawLightPage(); break;
-    case PAGE_TEMP: drawTempPage(); break;
-    case PAGE_OUTPUTS: drawOutputsPage(); break;
+    case PAGE_HOME:     drawHome(); break;
+    case PAGE_LIGHT:    drawLightPage(); break;
+    case PAGE_OUTPUTS:  drawOutputsPage(); break;
+    case PAGE_BATTERY:  drawBatteryPage(); break;
     case PAGE_SETTINGS: drawSettingsPage(); break;
+    default:            currentPage = PAGE_HOME; drawHome(); break;
   }
 
   display.display();
@@ -283,49 +294,60 @@ void drawDisplay() {
 void nextPage(int direction) {
   int page = (int)currentPage + direction;
 
-  if (page < 0) page = 4;
-  if (page > 4) page = 0;
+  if (page < 0) page = PAGE_COUNT - 1;
+  if (page >= PAGE_COUNT) page = 0;
 
   currentPage = (Page)page;
 }
 
 void handleJoystick() {
+  unsigned long now = millis();
+
+  // Only accept a joystick direction at a controlled interval.
+  // This prevents the menu from flying through several pages.
+  if (now - lastJoystickMove < JOYSTICK_REPEAT) return;
+
   int x = analogRead(JOY_X);
   int y = analogRead(JOY_Y);
 
   if (y < JOY_CENTER - JOY_DEADZONE) {
     nextPage(-1);
-    delay(120);
+    lastJoystickMove = now;
   } else if (y > JOY_CENTER + JOY_DEADZONE) {
     nextPage(1);
-    delay(120);
+    lastJoystickMove = now;
   }
 
   if (currentPage == PAGE_LIGHT || currentPage == PAGE_SETTINGS) {
     if (x < JOY_CENTER - JOY_DEADZONE) {
       darkThreshold -= 50;
       if (darkThreshold < 100) darkThreshold = 100;
-      delay(80);
+      lastJoystickMove = now;
     } else if (x > JOY_CENTER + JOY_DEADZONE) {
       darkThreshold += 50;
       if (darkThreshold > 4000) darkThreshold = 4000;
-      delay(80);
+      lastJoystickMove = now;
     }
   }
 }
 
 void handleJoystickButton() {
   bool button = digitalRead(JOY_BTN);
+  unsigned long now = millis();
 
   if (button == LOW && lastButtonState == HIGH &&
-      millis() - lastButtonTime > BUTTON_DEBOUNCE) {
+      now - lastButtonTime > BUTTON_DEBOUNCE) {
 
-    lastButtonTime = millis();
+    lastButtonTime = now;
 
     if (currentPage == PAGE_OUTPUTS) {
-      if (gardenMode == MODE_AUTO) gardenMode = MODE_FORCE_ON;
-      else if (gardenMode == MODE_FORCE_ON) gardenMode = MODE_FORCE_OFF;
-      else gardenMode = MODE_AUTO;
+      if (gardenMode == MODE_AUTO) {
+        gardenMode = MODE_FORCE_ON;
+      } else if (gardenMode == MODE_FORCE_ON) {
+        gardenMode = MODE_FORCE_OFF;
+      } else {
+        gardenMode = MODE_AUTO;
+      }
 
       readSensors();
     }
@@ -379,9 +401,6 @@ void setup() {
     Serial.println("No SSD1306 OLED found at 0x3C/0x3D.");
   }
 
-  dht.begin();
-  delay(1500);
-
   readSensors();
   drawDisplay();
 
@@ -402,11 +421,7 @@ void loop() {
     Serial.print(lightRaw);
     Serial.print(" State=");
     Serial.print(isDark ? "NIGHT" : "DAY");
-    Serial.print(" Temp=");
-    Serial.print(temperatureC);
-    Serial.print("C Hum=");
-    Serial.print(humidity);
-    Serial.print("% Garden=");
+    Serial.print(" Garden=");
     Serial.print(gardenLights ? "ON" : "OFF");
     Serial.print(" Mode=");
     Serial.println(modeName());
@@ -418,4 +433,13 @@ void loop() {
   }
 
   delay(5);
+}
+
+const char *modeName() {
+  switch (gardenMode) {
+    case MODE_AUTO:      return "AUTO";
+    case MODE_FORCE_ON:  return "ON";
+    case MODE_FORCE_OFF: return "OFF";
+  }
+  return "?";
 }
