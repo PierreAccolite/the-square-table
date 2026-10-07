@@ -29,14 +29,24 @@
  *   A0 -> GPIO35
  *   D0 -> GPIO39
  *
- * Battery sensing remains disabled until the TTGO board's battery circuit
- * and ADC pin are positively identified.
+ * Battery monitoring:
+ *   This board variant does not expose a documented onboard battery ADC.
+ *   An optional external 100K/100K divider can be connected to GPIO36.
+ *   Divider input should be the board's battery/5V rail; GPIO36 must never
+ *   see more than the ESP32 ADC input range.
+ *
+ * Clock:
+ *   Software RTC using the ESP32 system clock + Preferences.
+ *   The clock continues while the board remains powered from its battery.
+ *   It is not a true RTC: removing all power stops the clock.
  */
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <math.h>
+#include <Preferences.h>
+#include <time.h>
 
 #define OLED_SDA 21
 #define OLED_SCL 22
@@ -58,12 +68,15 @@
 #define RELAY_ON LOW
 #define RELAY_OFF HIGH
 
-// Battery intentionally disabled until the TTGO battery sense circuit is verified.
-#define BATTERY_SENSE_PIN -1
+// Optional battery monitor.
+// Hardware required: 100K from battery/5V rail to GPIO36 and 100K from
+// GPIO36 to GND. This gives a 2:1 divider.
+#define BATTERY_SENSE_PIN 36
 #define BATTERY_DIVIDER_RATIO 2.0f
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 uint8_t oledAddress = 0;
+Preferences preferences;
 
 // -------------------- Light --------------------
 
@@ -93,6 +106,204 @@ int tempSamples[TEMP_SAMPLES];
 int tempSampleIndex = 0;
 bool tempSamplesReady = false;
 
+// -------------------- Clock --------------------
+
+// Software clock. It survives normal resets because the last saved epoch is
+// stored in NVS, and continues ticking while the ESP32 remains powered.
+// It cannot account for time spent completely without power.
+
+enum ClockField {
+  CLOCK_HOUR,
+  CLOCK_MINUTE,
+  CLOCK_DAY,
+  CLOCK_MONTH,
+  CLOCK_YEAR,
+  CLOCK_FIELD_COUNT
+};
+
+ClockField clockField = CLOCK_HOUR;
+bool clockSet = false;
+unsigned long lastClockSave = 0;
+const unsigned long CLOCK_SAVE_INTERVAL = 60000;
+
+int daysInMonth(int year, int month) {
+  if (month == 2) {
+    bool leap = ((year % 4 == 0 && year % 100 != 0) || (year % 400 == 0));
+    return leap ? 29 : 28;
+  }
+
+  if (month == 4 || month == 6 || month == 9 || month == 11) return 30;
+  return 31;
+}
+
+void clampClockDate(struct tm &t) {
+  if (t.tm_year + 1900 < 2020) t.tm_year = 2020 - 1900;
+  if (t.tm_year + 1900 > 2099) t.tm_year = 2099 - 1900;
+
+  if (t.tm_mon < 0) t.tm_mon = 0;
+  if (t.tm_mon > 11) t.tm_mon = 11;
+
+  int maxDay = daysInMonth(t.tm_year + 1900, t.tm_mon + 1);
+  if (t.tm_mday < 1) t.tm_mday = 1;
+  if (t.tm_mday > maxDay) t.tm_mday = maxDay;
+
+  if (t.tm_hour < 0) t.tm_hour = 0;
+  if (t.tm_hour > 23) t.tm_hour = 23;
+  if (t.tm_min < 0) t.tm_min = 0;
+  if (t.tm_min > 59) t.tm_min = 59;
+  if (t.tm_sec < 0) t.tm_sec = 0;
+  if (t.tm_sec > 59) t.tm_sec = 59;
+}
+
+void saveClock() {
+  time_t now = time(nullptr);
+  if (now < 1000000000) return;
+
+  preferences.putULong64("epoch", (uint64_t)now);
+  preferences.putBool("clockSet", true);
+  clockSet = true;
+  lastClockSave = millis();
+}
+
+void loadClock() {
+  uint64_t saved = preferences.getULong64("epoch", 0);
+  clockSet = preferences.getBool("clockSet", false);
+
+  if (clockSet && saved > 1000000000ULL) {
+    struct timeval tv;
+    tv.tv_sec = (time_t)saved;
+    tv.tv_usec = 0;
+    settimeofday(&tv, nullptr);
+    return;
+  }
+
+  // First run: use the firmware build date/time as a useful starting point.
+  struct tm buildTime = {};
+  const char *date = __DATE__;
+  const char *timeStr = __TIME__;
+
+  char monthText[4];
+  int day, year, hour, minute, second;
+  sscanf(date, "%3s %d %d", monthText, &day, &year);
+  sscanf(timeStr, "%d:%d:%d", &hour, &minute, &second);
+
+  const char *months = "JanFebMarAprMayJunJulAugSepOctNovDec";
+  const char *m = strstr(months, monthText);
+  int month = m ? (int)(m - months) / 3 : 0;
+
+  buildTime.tm_year = year - 1900;
+  buildTime.tm_mon = month;
+  buildTime.tm_mday = day;
+  buildTime.tm_hour = hour;
+  buildTime.tm_min = minute;
+  buildTime.tm_sec = second;
+  buildTime.tm_isdst = -1;
+
+  time_t buildEpoch = mktime(&buildTime);
+  struct timeval tv;
+  tv.tv_sec = buildEpoch;
+  tv.tv_usec = 0;
+  settimeofday(&tv, nullptr);
+  clockSet = false;
+}
+
+void adjustClock(int direction) {
+  time_t now = time(nullptr);
+  if (now < 1000000000) return;
+
+  struct tm t;
+  localtime_r(&now, &t);
+
+  switch (clockField) {
+    case CLOCK_HOUR:
+      t.tm_hour += direction;
+      break;
+
+    case CLOCK_MINUTE:
+      t.tm_min += direction;
+      break;
+
+    case CLOCK_DAY:
+      t.tm_mday += direction;
+      break;
+
+    case CLOCK_MONTH:
+      t.tm_mon += direction;
+      break;
+
+    case CLOCK_YEAR:
+      t.tm_year += direction;
+      break;
+
+    default:
+      break;
+  }
+
+  t.tm_isdst = -1;
+  time_t adjusted = mktime(&t);
+  localtime_r(&adjusted, &t);
+  clampClockDate(t);
+  adjusted = mktime(&t);
+
+  struct timeval tv;
+  tv.tv_sec = adjusted;
+  tv.tv_usec = 0;
+  settimeofday(&tv, nullptr);
+
+  saveClock();
+
+  Serial.print("CLOCK -> ");
+  Serial.printf("%04d-%02d-%02d %02d:%02d:%02d\n",
+                t.tm_year + 1900,
+                t.tm_mon + 1,
+                t.tm_mday,
+                t.tm_hour,
+                t.tm_min,
+                t.tm_sec);
+}
+
+void nextClockField() {
+  clockField = (ClockField)(((int)clockField + 1) % CLOCK_FIELD_COUNT);
+  Serial.print("Clock field -> ");
+  switch (clockField) {
+    case CLOCK_HOUR: Serial.println("HOUR"); break;
+    case CLOCK_MINUTE: Serial.println("MINUTE"); break;
+    case CLOCK_DAY: Serial.println("DAY"); break;
+    case CLOCK_MONTH: Serial.println("MONTH"); break;
+    case CLOCK_YEAR: Serial.println("YEAR"); break;
+    default: Serial.println("?"); break;
+  }
+}
+
+const char *clockFieldName() {
+  switch (clockField) {
+    case CLOCK_HOUR: return "HOUR";
+    case CLOCK_MINUTE: return "MIN";
+    case CLOCK_DAY: return "DAY";
+    case CLOCK_MONTH: return "MONTH";
+    case CLOCK_YEAR: return "YEAR";
+  }
+  return "?";
+}
+
+void printClock(char *buffer, size_t length) {
+  time_t now = time(nullptr);
+  struct tm t;
+  localtime_r(&now, &t);
+
+  snprintf(buffer, length, "%02d:%02d:%02d",
+           t.tm_hour, t.tm_min, t.tm_sec);
+}
+
+void printClockDate(char *buffer, size_t length) {
+  time_t now = time(nullptr);
+  struct tm t;
+  localtime_r(&now, &t);
+
+  snprintf(buffer, length, "%02d/%02d/%04d",
+           t.tm_mday, t.tm_mon + 1, t.tm_year + 1900);
+}
+
 // -------------------- Outputs --------------------
 
 bool gardenLights = false;
@@ -117,6 +328,7 @@ enum Page {
   PAGE_LIGHT,
   PAGE_OUTPUTS,
   PAGE_BATTERY,
+  PAGE_CLOCK,
   PAGE_SETTINGS,
   PAGE_TEMP,
   PAGE_COUNT
@@ -324,9 +536,8 @@ void drawOutputsPage() {
 
 float readBatteryVoltage() {
 #if BATTERY_SENSE_PIN >= 0
-  int raw = analogRead(BATTERY_SENSE_PIN);
-  float pinVoltage = ((float)raw / 4095.0f) * 3.3f;
-  return pinVoltage * BATTERY_DIVIDER_RATIO;
+  uint32_t mv = analogReadMilliVolts(BATTERY_SENSE_PIN);
+  return ((float)mv / 1000.0f) * BATTERY_DIVIDER_RATIO;
 #else
   return NAN;
 #endif
@@ -336,23 +547,50 @@ void drawBatteryPage() {
   drawTitle("BATTERY", 4);
 
   display.setCursor(0, 11);
-  display.print("BATTERY");
-
-  display.setCursor(0, 19);
-
   float voltage = readBatteryVoltage();
 
   if (isnan(voltage)) {
-    display.print("VOLT N/S");
+    display.print("MONITOR N/S");
   } else {
     display.print("VOLT ");
     display.print(voltage, 2);
     display.print("V");
   }
+
+  display.setCursor(0, 19);
+  if (!isnan(voltage)) {
+    if (voltage >= 4.15f) display.print("FULL");
+    else if (voltage >= 3.85f) display.print("GOOD");
+    else if (voltage >= 3.60f) display.print("LOW");
+    else display.print("CRITICAL");
+  } else {
+    display.print("GPIO36 / 2:1");
+  }
+}
+
+void drawClockPage() {
+  drawTitle("CLOCK", 5);
+
+  char clockText[16];
+  char dateText[20];
+  printClock(clockText, sizeof(clockText));
+  printClockDate(dateText, sizeof(dateText));
+
+  display.setCursor(0, 11);
+  display.print(clockText);
+
+  display.setCursor(72, 11);
+  display.print(clockSet ? "SET" : "BUILD");
+
+  display.setCursor(0, 19);
+  display.print(dateText);
+
+  display.setCursor(78, 19);
+  display.print(clockFieldName());
 }
 
 void drawSettingsPage() {
-  drawTitle("SETTINGS", 5);
+  drawTitle("SETTINGS", 6);
 
   display.setCursor(0, 11);
   display.print("LTHR ");
@@ -373,7 +611,7 @@ void drawSettingsPage() {
 }
 
 void drawTempPage() {
-  drawTitle("TEMP", 6);
+  drawTitle("TEMP", 7);
 
   display.setCursor(0, 11);
   display.print("TEMP ");
@@ -411,6 +649,10 @@ void drawDisplay() {
 
     case PAGE_BATTERY:
       drawBatteryPage();
+      break;
+
+    case PAGE_CLOCK:
+      drawClockPage();
       break;
 
     case PAGE_SETTINGS:
@@ -505,6 +747,22 @@ void handleJoystick() {
       }
     }
 
+    // Clock adjustment.
+    // On CLOCK page, left/right changes the selected field.
+    if (currentPage == PAGE_CLOCK) {
+      if (dx < -JOY_DEADZONE) {
+        adjustClock(-1);
+        joystickReady = false;
+        return;
+      }
+
+      if (dx > JOY_DEADZONE) {
+        adjustClock(1);
+        joystickReady = false;
+        return;
+      }
+    }
+
     // Temperature calibration.
     // On TEMP page, left/right shifts the RAW reference.
     // This lets us compensate for a different sensor/module without
@@ -543,8 +801,13 @@ void handleJoystickButton() {
 
     lastButtonTime = now;
 
+    // CLOCK page: button cycles the editable field.
+    if (currentPage == PAGE_CLOCK) {
+      nextClockField();
+    }
+
     // OUTPUTS page: cycle garden AUTO -> forced ON -> forced OFF.
-    if (currentPage == PAGE_OUTPUTS) {
+    else if (currentPage == PAGE_OUTPUTS) {
 
       if (gardenMode == MODE_AUTO) {
         gardenMode = MODE_FORCE_ON;
@@ -579,7 +842,19 @@ void printDiagnostics() {
   int y = analogRead(JOY_Y);
   int button = digitalRead(JOY_BTN);
 
-  Serial.print("LIGHT=");
+  char clockText[16];
+  printClock(clockText, sizeof(clockText));
+
+  Serial.print("TIME=");
+  Serial.print(clockText);
+
+  float batteryVoltage = readBatteryVoltage();
+  Serial.print("  BAT=");
+  if (isnan(batteryVoltage)) Serial.print("N/S");
+  else Serial.print(batteryVoltage, 2);
+  Serial.print("V");
+
+  Serial.print("  LIGHT=");
   Serial.print(lightRaw);
 
   Serial.print("  TEMP_A0=");
@@ -651,6 +926,14 @@ void setup() {
   pinMode(TEMP_D0, INPUT);
 
   analogReadResolution(12);
+  analogSetPinAttenuation(BATTERY_SENSE_PIN, ADC_11db);
+
+  preferences.begin("garden", false);
+
+  // Namibia / Central Africa Time = UTC+2, no daylight-saving changes.
+  setenv("TZ", "CAT-2", 1);
+  tzset();
+  loadClock();
 
   Wire.begin(OLED_SDA, OLED_SCL);
   findOLED();
@@ -699,7 +982,8 @@ void setup() {
   Serial.println("Light sensor: GPIO34");
   Serial.println("KY-028 A0: GPIO35");
   Serial.println("KY-028 D0: GPIO39");
-  Serial.println("Battery sensing: DISABLED");
+  Serial.println("Battery monitor: GPIO36, external 100K/100K divider");
+  Serial.println("Clock: software clock, saved in NVS while powered");
   Serial.println("Irrigation control: LOCKED OFF");
 
   readSensors();
@@ -719,6 +1003,10 @@ void loop() {
   if (now - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = now;
     readSensors();
+  }
+
+  if (clockSet && now - lastClockSave >= CLOCK_SAVE_INTERVAL) {
+    saveClock();
   }
 
   if (now - lastDisplayUpdate >= DISPLAY_INTERVAL) {
