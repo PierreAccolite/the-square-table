@@ -65,14 +65,17 @@
 #define GARDEN_RELAY 26
 #define IRRIGATION_RELAY 27
 
-#define RELAY_ON LOW
-#define RELAY_OFF HIGH
+#define RELAY_ON HIGH
+#define RELAY_OFF LOW
 
-// Optional battery monitor.
-// Hardware required: 100K from battery/5V rail to GPIO36 and 100K from
-// GPIO36 to GND. This gives a 2:1 divider.
+// Battery monitor.
+// Hardware: 38K from battery positive to GPIO36 and 38K from GPIO36
+// to GND. This gives a 2:1 divider.
+// GPIO36 must never be connected directly to the battery.
+// Battery voltage is calibrated against a multimeter reference.
 #define BATTERY_SENSE_PIN 36
 #define BATTERY_DIVIDER_RATIO 2.0f
+#define BATTERY_CALIBRATION 0.913f
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 uint8_t oledAddress = 0;
@@ -536,8 +539,17 @@ void drawOutputsPage() {
 
 float readBatteryVoltage() {
 #if BATTERY_SENSE_PIN >= 0
-  uint32_t mv = analogReadMilliVolts(BATTERY_SENSE_PIN);
-  return ((float)mv / 1000.0f) * BATTERY_DIVIDER_RATIO;
+  uint32_t mv = analogRead(BATTERY_SENSE_PIN);
+
+  // Convert ADC reading back through the 2:1 resistor divider.
+  float measuredVoltage =
+    ((float)mv / 1000.0f) * BATTERY_DIVIDER_RATIO;
+
+  // Correct the measured value against the multimeter reference.
+  float batteryVoltage =
+    measuredVoltage * BATTERY_CALIBRATION;
+
+  return batteryVoltage;
 #else
   return NAN;
 #endif
