@@ -8,7 +8,7 @@ CREATE INDEX idx_auction_items_status ON auction_items(auction_id,status);
 CREATE TABLE bids (id INTEGER PRIMARY KEY AUTOINCREMENT, auction_item_id INTEGER NOT NULL, bidder_user_id INTEGER NOT NULL, amount_cents INTEGER NOT NULL CHECK(amount_cents>0), client_request_id TEXT NOT NULL UNIQUE CHECK(length(client_request_id)=36), placed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')), FOREIGN KEY(auction_item_id) REFERENCES auction_items(id) ON DELETE RESTRICT, FOREIGN KEY(bidder_user_id) REFERENCES users(id) ON DELETE RESTRICT);
 CREATE INDEX idx_bids_item_amount_time ON bids(auction_item_id,amount_cents,placed_at,id);
 CREATE INDEX idx_bids_bidder_time ON bids(bidder_user_id,placed_at);
-CREATE TABLE audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_user_id INTEGER, event_type TEXT NOT NULL CHECK(length(event_type) BETWEEN 1 AND 100), entity_type TEXT, entity_id TEXT, ip_address TEXT, user_agent TEXT, details_json TEXT CHECK(details_json IS NULL OR json_valid(details_json)), created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')), FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL);
+CREATE TABLE audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_user_id INTEGER, event_type TEXT NOT NULL CHECK(length(event_type) BETWEEN 1 AND 100), entity_type TEXT, entity_id TEXT, ip_address TEXT, user_agent TEXT, details_json TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')), FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL);
 CREATE INDEX idx_audit_created_at ON audit_events(created_at);
 CREATE INDEX idx_audit_actor_time ON audit_events(actor_user_id,created_at);
 CREATE INDEX idx_audit_entity ON audit_events(entity_type,entity_id);
