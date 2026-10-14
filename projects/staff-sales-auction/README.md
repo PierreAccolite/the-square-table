@@ -1,6 +1,6 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.3.0 — navigation and account-management development  
+**Version:** 0.4.0 — reporting and bulk account administration  
 **Status:** Internal development/testing only; live bidding is not enabled.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
@@ -43,6 +43,8 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Publish individual catalogue items and schedule a draft auction after required dates and at least one published item are present.
 - Shared sticky navigation that adapts to employee, administrator and auditor roles.
 - Admin user management: create accounts, edit staff details and roles, enable/disable accounts, and reset passwords.
+- CSV bulk user import with row-level validation, duplicate detection and audit events.
+- Read-only admin/auditor reports for auctions, catalogue items, bid activity and user accounts, with CSV exports.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
 - Staff catalogue displays item photos through an authenticated image endpoint.
@@ -56,6 +58,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Anti-sniping execution.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - No automated bid-processing workflow yet.
+- Buyout/purchase-now, item bid counters, procurement approval permissions, self-service password reset tokens and winner-result emails are still planned; these need additional schema and mail-transport configuration.
 - Award/finalisation workflow, winner notifications, and production security certification.
 
 **Important:** scheduling currently makes the catalogue visible; it does not open bidding. Do not use this release to conduct a real auction.
