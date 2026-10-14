@@ -2,7 +2,7 @@
 declare(strict_types=1);
 if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
 echo "Staff Sales Auction Portal — environment check\nPHP: ".PHP_VERSION."\n";
-foreach(['pdo','pdo_sqlite','json','mbstring'] as $x){printf("%-12s %s\n",$x.':',extension_loaded($x)?'OK':'MISSING');if(!extension_loaded($x))exit(1);}
+foreach(['pdo','pdo_sqlite','json','mbstring','fileinfo'] as $x){printf("%-12s %s\n",$x.':',extension_loaded($x)?'OK':'MISSING');if(!extension_loaded($x))exit(1);}
 $f=dirname(__DIR__).'/config/local.php';if(!is_file($f)){echo "Configuration: MISSING (run python3 tools/setup_local.py)\n";exit(1);}
 $c=require $f;$d=$c['db']??[];$path=(string)($d['path']??'');
 if(($d['driver']??'')!=='sqlite'||$path===''){echo "Database configuration: INVALID (SQLite expected)\n";exit(1);}
