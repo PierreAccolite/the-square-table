@@ -1,4 +1,5 @@
 PRAGMA foreign_keys = ON;
+BEGIN IMMEDIATE;
 CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(length(username) BETWEEN 3 AND 80), display_name TEXT NOT NULL CHECK(length(display_name) BETWEEN 1 AND 160), employee_number TEXT UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'employee' CHECK(role IN ('employee','admin','auditor')), status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')), created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), last_login_at TEXT);
 CREATE INDEX idx_users_status_role ON users(status,role);
 CREATE TABLE auctions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 180), description TEXT, status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','scheduled','open','closed','cancelled')), starts_at TEXT, ends_at TEXT, anti_sniping_window_seconds INTEGER NOT NULL DEFAULT 120 CHECK(anti_sniping_window_seconds>0), anti_sniping_extension_seconds INTEGER NOT NULL DEFAULT 120 CHECK(anti_sniping_extension_seconds>0), created_by INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), closed_at TEXT, FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE RESTRICT);
@@ -16,3 +17,4 @@ CREATE TABLE login_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, username_key 
 CREATE INDEX idx_login_attempts_lookup ON login_attempts(username_key,ip_address,attempted_at);
 CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, notification_type TEXT NOT NULL CHECK(length(notification_type) BETWEEN 1 AND 80), title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 180), message TEXT NOT NULL, read_at TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT);
 CREATE INDEX idx_notifications_user_read ON notifications(user_id,read_at,created_at);
+COMMIT;
