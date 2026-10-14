@@ -1,0 +1,11 @@
+/config/local.php
+/.env
+/storage/logs/*
+!/storage/logs/.gitkeep
+/storage/item-images/*
+!/storage/item-images/.gitkeep
+/storage/sessions/*
+!/storage/sessions/.gitkeep
+/vendor/
+/.DS_Store
+*.swp
