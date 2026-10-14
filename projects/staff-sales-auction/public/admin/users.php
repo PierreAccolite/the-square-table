@@ -33,8 +33,11 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   }
  }elseif($action==='status'){
   $id=(int)($_POST['user_id']??0);$status=(string)($_POST['status']??'');
+  $targetQ=db()->prepare('SELECT id,role,status FROM users WHERE id=:id');$targetQ->execute(['id'=>$id]);$target=$targetQ->fetch();
   if($id===(int)$user['id'])$error='You cannot disable your own account.';
+  elseif(!$target)$error='User account not found.';
   elseif(!in_array($status,['active','disabled'],true))$error='Invalid account status.';
+  elseif($status==='disabled'&&$target['role']==='admin'&&$target['status']==='active'&&(int)db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND status='active'")->fetchColumn()<=1)$error='You cannot disable the last active administrator.';
   else{$q=db()->prepare('UPDATE users SET status=:status,updated_at=datetime(\'now\') WHERE id=:id');$q->execute(['status'=>$status,'id'=>$id]);if($q->rowCount())audit_log((int)$user['id'],'user.status_changed','user',(string)$id,['status'=>$status]);redirect_to('admin/users.php?updated=1');}
  }elseif($action==='reset_password'){
   $id=(int)($_POST['user_id']??0);$password=(string)($_POST['password']??'');
