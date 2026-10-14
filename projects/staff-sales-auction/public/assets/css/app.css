@@ -16,3 +16,8 @@
 
 /* Final alignment and responsive refinements */
 .primary-nav{overflow-x:auto;scrollbar-width:thin}.stat-grid-five .stat-card:last-child{grid-column:auto}.action-grid{align-items:stretch}.action-card{height:100%;min-height:175px}.action-card>span:not(.action-icon){flex:1}.dashboard-actions .button{min-height:44px}.data-table td:last-child{min-width:110px}.admin-form input[type=file]{padding:9px}.catalogue-card{height:100%}
+
+/* Admin workspace cards form balanced rows */
+.action-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:900px){.action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.action-grid{grid-template-columns:1fr}}
