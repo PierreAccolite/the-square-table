@@ -1,5 +1,7 @@
 /config/local.php
 /.env
+/storage/database/*
+!/storage/database/.gitkeep
 /storage/logs/*
 !/storage/logs/.gitkeep
 /storage/item-images/*
@@ -7,5 +9,7 @@
 /storage/sessions/*
 !/storage/sessions/.gitkeep
 /vendor/
-/.DS_Store
+__pycache__/
+*.py[cod]
+.DS_Store
 *.swp
