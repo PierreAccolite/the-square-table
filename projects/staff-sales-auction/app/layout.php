@@ -13,9 +13,12 @@ function render_page_start(string $title,string $activeNav,array $user):void{
   $nav[]=['key'=>'admin','label'=>'Overview','url'=>'admin/index.php','roles'=>['admin']];
   $nav[]=['key'=>'auctions','label'=>'Auctions','url'=>'admin/auctions.php','roles'=>['admin']];
   $nav[]=['key'=>'users','label'=>'Users','url'=>'admin/users.php','roles'=>['admin']];
+  $nav[]=['key'=>'bulk-users','label'=>'Bulk upload','url'=>'admin/bulk-users.php','roles'=>['admin']];
+  $nav[]=['key'=>'reports','label'=>'Reports','url'=>'admin/reports.php','roles'=>['admin']];
   $nav[]=['key'=>'audit','label'=>'Audit log','url'=>'admin/audit.php','roles'=>['admin']];
  }elseif($auditor){
   $nav[]=['key'=>'audit','label'=>'Audit log','url'=>'admin/audit.php','roles'=>['auditor']];
+  $nav[]=['key'=>'reports','label'=>'Reports','url'=>'admin/reports.php','roles'=>['auditor']];
  }
  ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($title) ?> · Staff Sales</title><link rel="stylesheet" href="<?= e(app_url('assets/css/app.css')) ?>"></head><body class="app-body">
  <header class="app-navbar"><a class="brand" href="<?= e(app_url('index.php')) ?>"><span class="brand-mark">SS</span><span><strong>Staff Sales</strong><small>Internal auction portal</small></span></a>
