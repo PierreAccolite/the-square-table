@@ -106,6 +106,11 @@ def main() -> None:
         if fk:
             stop("Foreign-key integrity check reported a problem.")
         connection.close()
+        # Restrict local database access on Unix-like systems; configure the
+        # web-server account/group to match these permissions during deployment.
+        if os.name != "nt":
+            os.chmod(db_path.parent, 0o770)
+            os.chmod(db_path, 0o660)
     except sqlite3.Error as exc:
         stop(f"SQLite setup failed: {exc}")
     print(f"Database file: {db_path}")
