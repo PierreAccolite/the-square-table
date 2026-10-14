@@ -32,7 +32,7 @@ php tools/check_environment.php
 
 See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 
-## Included in v0.2 development
+## Included in v0.3 development
 - SQLite schema and local setup wizard.
 - Login/logout foundation, password hashing, CSRF tokens, secure session settings and basic login throttling.
 - Employee dashboard with a staff catalogue entry point.
@@ -41,14 +41,21 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Add catalogue items with lot number, description, condition notes, opening price and minimum bid increment.
 - Store prices as integer cents.
 - Publish individual catalogue items and schedule a draft auction after required dates and at least one published item are present.
-- Shared sticky navigation that adapts to employee, administrator and auditor roles.\n- Admin user management: create accounts, edit staff details and roles, enable/disable accounts, and reset passwords.\n- Auction editing for draft and scheduled auctions.\n- Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.\n- Staff catalogue displays item photos through an authenticated image endpoint.\n- Personal bid-history page, notification inbox, and read-only audit log.\n- Signed-in employees can browse published items in scheduled auctions.
+- Shared sticky navigation that adapts to employee, administrator and auditor roles.
+- Admin user management: create accounts, edit staff details and roles, enable/disable accounts, and reset passwords.
+- Auction editing for draft and scheduled auctions.
+- Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
+- Staff catalogue displays item photos through an authenticated image endpoint.
+- Personal bid-history page, notification inbox, and read-only audit log.
+- Signed-in employees can browse published items in scheduled auctions.
 - Audit events for auction and item creation and auction scheduling.
 
 ## Not included yet
 - Bid submission and transactional bid validation.
 - Automatic auction opening/closing, live countdown or polling.
 - Anti-sniping execution.
-- Item deletion is intentionally not offered; items can be withdrawn.\n- No automated bid-processing workflow yet.
+- Item deletion is intentionally not offered; items can be withdrawn.
+- No automated bid-processing workflow yet.
 - Award/finalisation workflow, winner notifications, and production security certification.
 
 **Important:** scheduling currently makes the catalogue visible; it does not open bidding. Do not use this release to conduct a real auction.
