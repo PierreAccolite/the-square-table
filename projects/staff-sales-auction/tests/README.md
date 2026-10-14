@@ -1,4 +1,4 @@
-# Test plan — v0.2 development
+# Test plan — v0.3 development
 
 Run on a disposable local SQLite database before internal deployment. Do not conduct a real auction with this release.
 
@@ -30,5 +30,5 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] Auction and item creation/scheduling generate audit events.
 - [ ] Public web server document root points to `public/` only.
 
-## Not implemented and therefore not testable yet
+## Account and navigation\n- [ ] Employee navigation omits administrator-only links.\n- [ ] Administrator navigation includes auctions, users and audit log.\n- [ ] Auditor can view the audit log but cannot open administrator management pages.\n- [ ] Disabled users lose access on their next authenticated request.\n- [ ] User profile updates, role changes, password resets and status changes require CSRF tokens.\n- [ ] The last active administrator cannot be disabled or demoted.\n- [ ] Employee can view only their own bid history and notifications.\n\n## Editing and images\n- [ ] Draft and published items can be edited by an administrator.\n- [ ] Awarded items are locked against editing.\n- [ ] Duplicate lot numbers are rejected.\n- [ ] Image upload rejects unsupported types, oversized files and excessive dimensions.\n- [ ] Images are stored outside the public web root and served only through the authenticated image endpoint.\n- [ ] Non-admin users cannot view draft or unpublished item images.\n- [ ] Draft or scheduled auctions can be edited; closed/open/cancelled auctions are locked.\n\n## Not implemented and therefore not testable yet
 Simultaneous bid handling, minimum bid validation, opening-price enforcement, deadline boundary, anti-sniping, idempotent retries, automatic closing/finalisation, winner selection, notifications and audit verification.
