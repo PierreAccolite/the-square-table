@@ -44,6 +44,9 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Shared sticky navigation that adapts to employee, administrator and auditor roles.
 - Admin user management: create accounts, edit staff details and roles, enable/disable accounts, and reset passwords.
 - CSV bulk user import with row-level validation, duplicate detection and audit events.
+- Read-only admin/auditor reports for auction summaries, item catalogues, bid activity and user accounts, with CSV exports.
+- Item-level buyout toggle and configured buyout price; purchase transactions remain disabled.
+- Recorded bid counts on staff catalogue cards and the admin item list.
 - Read-only admin/auditor reports for auctions, catalogue items, bid activity and user accounts, with CSV exports.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
@@ -58,6 +61,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Anti-sniping execution.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - No automated bid-processing workflow yet.
+- Self-service password reset emails, procurement/custodian approval permissions and end-of-auction winner emails remain planned; these need secure token handling, approval-state design and mail transport configuration.
 - Buyout/purchase-now, item bid counters, procurement approval permissions, self-service password reset tokens and winner-result emails are still planned; these need additional schema and mail-transport configuration.
 - Award/finalisation workflow, winner notifications, and production security certification.
 
