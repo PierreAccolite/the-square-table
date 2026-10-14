@@ -1,85 +1,18 @@
--- Staff Sales Auction Portal v0.1.0. Apply once to a new empty database.
-SET NAMES utf8mb4;
-SET time_zone = '+00:00';
-
-CREATE TABLE users (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- username VARCHAR(80) NOT NULL,
- display_name VARCHAR(160) NOT NULL,
- employee_number VARCHAR(80) NULL,
- password_hash VARCHAR(255) NOT NULL,
- role ENUM('employee','admin','auditor') NOT NULL DEFAULT 'employee',
- status ENUM('active','disabled') NOT NULL DEFAULT 'active',
- created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
- updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
- last_login_at DATETIME NULL,
- PRIMARY KEY (id), UNIQUE KEY uq_users_username (username),
- UNIQUE KEY uq_users_employee_number (employee_number),
- KEY idx_users_status_role (status, role)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE auctions (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- title VARCHAR(180) NOT NULL, description TEXT NULL,
- status ENUM('draft','scheduled','open','closed','cancelled') NOT NULL DEFAULT 'draft',
- starts_at DATETIME NULL, ends_at DATETIME NULL,
- anti_sniping_window_seconds SMALLINT UNSIGNED NOT NULL DEFAULT 120,
- anti_sniping_extension_seconds SMALLINT UNSIGNED NOT NULL DEFAULT 120,
- created_by BIGINT UNSIGNED NOT NULL,
- created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
- updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
- closed_at DATETIME NULL, PRIMARY KEY (id),
- KEY idx_auctions_status_dates (status, starts_at, ends_at),
- CONSTRAINT fk_auctions_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
- CONSTRAINT chk_auctions_extension_window CHECK (anti_sniping_window_seconds > 0 AND anti_sniping_extension_seconds > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE auction_items (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, auction_id BIGINT UNSIGNED NOT NULL,
- lot_number VARCHAR(40) NOT NULL, title VARCHAR(180) NOT NULL, description TEXT NULL,
- condition_notes TEXT NULL, image_path VARCHAR(500) NULL,
- opening_price DECIMAL(12,2) NOT NULL, minimum_increment DECIMAL(12,2) NOT NULL DEFAULT 10.00,
- status ENUM('draft','published','withdrawn','awarded') NOT NULL DEFAULT 'draft',
- created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
- updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
- PRIMARY KEY (id), UNIQUE KEY uq_auction_lot (auction_id, lot_number),
- KEY idx_auction_items_status (auction_id, status),
- CONSTRAINT fk_auction_items_auction FOREIGN KEY (auction_id) REFERENCES auctions(id) ON DELETE RESTRICT,
- CONSTRAINT chk_auction_item_prices CHECK (opening_price >= 0 AND minimum_increment > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE bids (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, auction_item_id BIGINT UNSIGNED NOT NULL,
- bidder_user_id BIGINT UNSIGNED NOT NULL, amount DECIMAL(12,2) NOT NULL,
- client_request_id CHAR(36) NOT NULL, placed_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- PRIMARY KEY (id), UNIQUE KEY uq_bids_request_id (client_request_id),
- KEY idx_bids_item_amount_time (auction_item_id, amount, placed_at, id),
- KEY idx_bids_bidder_time (bidder_user_id, placed_at),
- CONSTRAINT fk_bids_item FOREIGN KEY (auction_item_id) REFERENCES auction_items(id) ON DELETE RESTRICT,
- CONSTRAINT fk_bids_bidder FOREIGN KEY (bidder_user_id) REFERENCES users(id) ON DELETE RESTRICT,
- CONSTRAINT chk_bids_positive_amount CHECK (amount > 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE audit_events (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, actor_user_id BIGINT UNSIGNED NULL,
- event_type VARCHAR(100) NOT NULL, entity_type VARCHAR(80) NULL, entity_id VARCHAR(100) NULL,
- ip_address VARCHAR(45) NULL, user_agent VARCHAR(500) NULL, details_json JSON NULL,
- created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- PRIMARY KEY (id), KEY idx_audit_created_at (created_at),
- KEY idx_audit_actor_time (actor_user_id, created_at), KEY idx_audit_entity (entity_type, entity_id),
- CONSTRAINT fk_audit_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE login_attempts (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, username_key VARCHAR(80) NOT NULL,
- ip_address VARCHAR(45) NOT NULL DEFAULT '', attempted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
- PRIMARY KEY (id), KEY idx_login_attempts_lookup (username_key, ip_address, attempted_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE notifications (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, user_id BIGINT UNSIGNED NOT NULL,
- notification_type VARCHAR(80) NOT NULL, title VARCHAR(180) NOT NULL, message TEXT NOT NULL,
- read_at DATETIME NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
- PRIMARY KEY (id), KEY idx_notifications_user_read (user_id, read_at, created_at),
- CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+PRAGMA foreign_keys = ON;
+CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(length(username) BETWEEN 3 AND 80), display_name TEXT NOT NULL CHECK(length(display_name) BETWEEN 1 AND 160), employee_number TEXT UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'employee' CHECK(role IN ('employee','admin','auditor')), status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')), created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), last_login_at TEXT);
+CREATE INDEX idx_users_status_role ON users(status,role);
+CREATE TABLE auctions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 180), description TEXT, status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','scheduled','open','closed','cancelled')), starts_at TEXT, ends_at TEXT, anti_sniping_window_seconds INTEGER NOT NULL DEFAULT 120 CHECK(anti_sniping_window_seconds>0), anti_sniping_extension_seconds INTEGER NOT NULL DEFAULT 120 CHECK(anti_sniping_extension_seconds>0), created_by INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), closed_at TEXT, FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE RESTRICT);
+CREATE INDEX idx_auctions_status_dates ON auctions(status,starts_at,ends_at);
+CREATE TABLE auction_items (id INTEGER PRIMARY KEY AUTOINCREMENT, auction_id INTEGER NOT NULL, lot_number TEXT NOT NULL CHECK(length(lot_number) BETWEEN 1 AND 40), title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 180), description TEXT, condition_notes TEXT, image_path TEXT, opening_price_cents INTEGER NOT NULL CHECK(opening_price_cents>=0), minimum_increment_cents INTEGER NOT NULL DEFAULT 1000 CHECK(minimum_increment_cents>0), status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','published','withdrawn','awarded')), created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), UNIQUE(auction_id,lot_number), FOREIGN KEY(auction_id) REFERENCES auctions(id) ON DELETE RESTRICT);
+CREATE INDEX idx_auction_items_status ON auction_items(auction_id,status);
+CREATE TABLE bids (id INTEGER PRIMARY KEY AUTOINCREMENT, auction_item_id INTEGER NOT NULL, bidder_user_id INTEGER NOT NULL, amount_cents INTEGER NOT NULL CHECK(amount_cents>0), client_request_id TEXT NOT NULL UNIQUE CHECK(length(client_request_id)=36), placed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')), FOREIGN KEY(auction_item_id) REFERENCES auction_items(id) ON DELETE RESTRICT, FOREIGN KEY(bidder_user_id) REFERENCES users(id) ON DELETE RESTRICT);
+CREATE INDEX idx_bids_item_amount_time ON bids(auction_item_id,amount_cents,placed_at,id);
+CREATE INDEX idx_bids_bidder_time ON bids(bidder_user_id,placed_at);
+CREATE TABLE audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_user_id INTEGER, event_type TEXT NOT NULL CHECK(length(event_type) BETWEEN 1 AND 100), entity_type TEXT, entity_id TEXT, ip_address TEXT, user_agent TEXT, details_json TEXT CHECK(details_json IS NULL OR json_valid(details_json)), created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')), FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL);
+CREATE INDEX idx_audit_created_at ON audit_events(created_at);
+CREATE INDEX idx_audit_actor_time ON audit_events(actor_user_id,created_at);
+CREATE INDEX idx_audit_entity ON audit_events(entity_type,entity_id);
+CREATE TABLE login_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, username_key TEXT NOT NULL COLLATE NOCASE, ip_address TEXT NOT NULL DEFAULT '', attempted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')));
+CREATE INDEX idx_login_attempts_lookup ON login_attempts(username_key,ip_address,attempted_at);
+CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, notification_type TEXT NOT NULL CHECK(length(notification_type) BETWEEN 1 AND 80), title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 180), message TEXT NOT NULL, read_at TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT);
+CREATE INDEX idx_notifications_user_read ON notifications(user_id,read_at,created_at);
