@@ -1,25 +1,20 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/app/bootstrap.php';
-if (current_user() !== null) redirect_to('index.php');
-$error = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
- if (!verify_csrf(isset($_POST['csrf_token'])?(string)$_POST['csrf_token']:null)) { http_response_code(400); exit('Invalid request token. Reload and try again.'); }
- $username=substr(strtolower(trim((string)($_POST['username']??''))),0,80);
- $password=(string)($_POST['password']??'');
- $ip=substr((string)($_SERVER['REMOTE_ADDR']??''),0,45);
- $q=db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE username_key=:u AND ip_address=:ip AND attempted_at >= (UTC_TIMESTAMP() - INTERVAL 15 MINUTE)');
- $q->execute(['u'=>$username,'ip'=>$ip]); $blocked=(int)$q->fetchColumn()>=5;
- $q=db()->prepare('SELECT id,username,display_name,password_hash,role,status FROM users WHERE username=:u LIMIT 1');
- $q->execute(['u'=>$username]); $user=$q->fetch();
- if (!$blocked && $user && $user['status']==='active' && password_verify($password,(string)$user['password_hash'])) {
-  session_regenerate_id(true);
-  $_SESSION['user']=['id'=>(int)$user['id'],'username'=>(string)$user['username'],'display_name'=>(string)$user['display_name'],'role'=>(string)$user['role']];
-  $q=db()->prepare('DELETE FROM login_attempts WHERE username_key=:u AND ip_address=:ip'); $q->execute(['u'=>$username,'ip'=>$ip]);
-  $q=db()->prepare('UPDATE users SET last_login_at=UTC_TIMESTAMP() WHERE id=:id'); $q->execute(['id'=>$user['id']]);
-  audit_log((int)$user['id'],'auth.login_success','user',(string)$user['id']); redirect_to('index.php');
+if(current_user()!==null)redirect_to('index.php');
+$error='';
+if($_SERVER['REQUEST_METHOD']==='POST'){
+ if(!verify_csrf(isset($_POST['csrf_token'])?(string)$_POST['csrf_token']:null)){http_response_code(400);exit('Invalid request token. Reload and try again.');}
+ $username=substr(strtolower(trim((string)($_POST['username']??''))),0,80);$password=(string)($_POST['password']??'');$ip=substr((string)($_SERVER['REMOTE_ADDR']??''),0,45);
+ $q=db()->prepare("SELECT COUNT(*) FROM login_attempts WHERE username_key=:u AND ip_address=:ip AND attempted_at>=datetime('now','-15 minutes')");$q->execute(['u'=>$username,'ip'=>$ip]);$blocked=(int)$q->fetchColumn()>=5;
+ $q=db()->prepare('SELECT id,username,display_name,password_hash,role,status FROM users WHERE username=:u COLLATE NOCASE LIMIT 1');$q->execute(['u'=>$username]);$user=$q->fetch();
+ if(!$blocked&&$user&&$user['status']==='active'&&password_verify($password,(string)$user['password_hash'])){
+  session_regenerate_id(true);$_SESSION['user']=['id'=>(int)$user['id'],'username'=>(string)$user['username'],'display_name'=>(string)$user['display_name'],'role'=>(string)$user['role']];
+  $q=db()->prepare('DELETE FROM login_attempts WHERE username_key=:u AND ip_address=:ip');$q->execute(['u'=>$username,'ip'=>$ip]);
+  $q=db()->prepare("UPDATE users SET last_login_at=datetime('now') WHERE id=:id");$q->execute(['id'=>$user['id']]);
+  audit_log((int)$user['id'],'auth.login_success','user',(string)$user['id']);redirect_to('index.php');
  }
- if (!$blocked) { $q=db()->prepare('INSERT INTO login_attempts (username_key,ip_address,attempted_at) VALUES (:u,:ip,UTC_TIMESTAMP())'); $q->execute(['u'=>$username,'ip'=>$ip]); }
+ if(!$blocked){$q=db()->prepare("INSERT INTO login_attempts(username_key,ip_address,attempted_at) VALUES(:u,:ip,datetime('now'))");$q->execute(['u'=>$username,'ip'=>$ip]);}
  audit_log($user?(int)$user['id']:null,$blocked?'auth.login_throttled':'auth.login_failed','user',$user?(string)$user['id']:null,['username'=>$username]);
  $error='Sign-in failed. Check your details or try again later.';
 }
