@@ -1,0 +1,14 @@
+<?php
+declare(strict_types=1);
+require dirname(__DIR__,2).'/app/bootstrap.php';
+$user=require_role('admin','auditor');
+$filter=trim((string)($_GET['event']??''));$page=max(1,(int)($_GET['page']??1));$perPage=50;$offset=($page-1)*$perPage;
+$where='';$params=[];if($filter!==''){$where='WHERE e.event_type LIKE :event';$params['event']='%'.$filter.'%';}
+$countQ=db()->prepare('SELECT COUNT(*) FROM audit_events e '.$where);$countQ->execute($params);$total=(int)$countQ->fetchColumn();
+$q=db()->prepare('SELECT e.id,e.actor_user_id,e.event_type,e.entity_type,e.entity_id,e.ip_address,e.created_at,u.username,u.display_name FROM audit_events e LEFT JOIN users u ON u.id=e.actor_user_id '.$where.' ORDER BY e.created_at DESC,e.id DESC LIMIT :limit OFFSET :offset');
+foreach($params as $key=>$value)$q->bindValue(':'.$key,$value);$q->bindValue(':limit',$perPage,PDO::PARAM_INT);$q->bindValue(':offset',$offset,PDO::PARAM_INT);$q->execute();$events=$q->fetchAll();
+require dirname(__DIR__,2).'/app/layout.php';render_page_start('Audit log','audit',$user);
+?>
+<section class="welcome"><div><p class="eyebrow">SECURITY & ACCOUNTABILITY</p><h1>Audit log</h1><p class="muted">Review sign-ins and important changes made within the portal. This page is read-only.</p></div><div class="welcome-icon">≋</div></section>
+<section class="content-panel"><form method="get" class="inline-form"><label for="event">Filter event type</label><input id="event" name="event" value="<?= e($filter) ?>" placeholder="e.g. user.created"><button class="button button-quiet" type="submit">Filter</button><?php if($filter!==''): ?><a class="text-link" href="<?= e(app_url('admin/audit.php')) ?>">Clear</a><?php endif; ?></form><p class="form-help"><?= $total ?> matching events · showing <?= $total===0?0:$offset+1 ?>–<?= min($offset+$perPage,$total) ?></p><div class="table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Actor</th><th>Event</th><th>Target</th><th>IP address</th></tr></thead><tbody><?php if(!$events): ?><tr><td colspan="5">No audit events match this filter.</td></tr><?php else: foreach($events as $ev): ?><tr><td><?= e($ev['created_at']) ?></td><td><?= e($ev['display_name']??'System / deleted user') ?><small class="table-sub"><?= e($ev['username']??'') ?></small></td><td><code><?= e($ev['event_type']) ?></code></td><td><?= e(trim((string)($ev['entity_type']??'').' '.(string)($ev['entity_id']??''))) ?></td><td><?= e($ev['ip_address']??'—') ?></td></tr><?php endforeach; endif; ?></tbody></table></div><div class="pager"><?php if($page>1): ?><a class="button button-quiet" href="?<?= e(http_build_query(['event'=>$filter,'page'=>$page-1])) ?>">← Newer</a><?php endif; ?><?php if($offset+$perPage<$total): ?><a class="button button-quiet" href="?<?= e(http_build_query(['event'=>$filter,'page'=>$page+1])) ?>">Older →</a><?php endif; ?></div></section>
+<?php render_page_end(); ?>
