@@ -1,19 +1,15 @@
 <?php
 declare(strict_types=1);
-
-/* Copy to config/local.php and set local values. Never commit real credentials. */
+/* Copy to config/local.php. Setup creates the SQLite database locally. */
 return [
-    'app_name' => 'Staff Sales Auction Portal',
-    'app_env' => 'development', // Use 'production' on the internal server.
-    'base_path' => '',          // Empty when public/ is the web root.
-    'timezone' => 'Africa/Windhoek',
-    'session_secure' => true,   // False only for isolated localhost HTTP development.
-    'db' => [
-        'host' => '127.0.0.1',
-        'port' => 3306,
-        'database' => 'staff_sales_auction',
-        'username' => 'staff_sales_app',
-        'password' => 'CHANGE_ME',
-        'charset' => 'utf8mb4',
-    ],
+ 'app_name'=>'Staff Sales Auction Portal',
+ 'app_env'=>'development',
+ 'base_path'=>'',
+ 'timezone'=>'Africa/Windhoek',
+ 'session_secure'=>true,
+ 'db'=>[
+  'driver'=>'sqlite',
+  'path'=>dirname(__DIR__).'/storage/database/staff_sales_auction.sqlite',
+  'busy_timeout_ms'=>5000,
+ ],
 ];
