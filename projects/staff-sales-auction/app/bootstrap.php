@@ -21,7 +21,13 @@ function app_url(string $p=''):string{return rtrim((string)app_config('base_path
 function redirect_to(string $p):never{header('Location: '.app_url($p),true,303);exit;}
 function csrf_token():string{if(!isset($_SESSION['csrf_token'])||!is_string($_SESSION['csrf_token']))$_SESSION['csrf_token']=bin2hex(random_bytes(32));return $_SESSION['csrf_token'];}
 function verify_csrf(?string $t):bool{return is_string($t)&&isset($_SESSION['csrf_token'])&&is_string($_SESSION['csrf_token'])&&hash_equals($_SESSION['csrf_token'],$t);}
-function current_user():?array{return isset($_SESSION['user'])&&is_array($_SESSION['user'])?$_SESSION['user']:null;}
+function current_user():?array{
+ if(!isset($_SESSION['user'])||!is_array($_SESSION['user'])||empty($_SESSION['user']['id']))return null;
+ static $checked=false;static $fresh=null;if($checked)return $fresh;$checked=true;
+ $q=db()->prepare('SELECT id,username,display_name,role,status FROM users WHERE id=:id LIMIT 1');$q->execute(['id'=>(int)$_SESSION['user']['id']]);$row=$q->fetch();
+ if(!$row||$row['status']!=='active'){$_SESSION=[];session_regenerate_id(true);return null;}
+ $fresh=['id'=>(int)$row['id'],'username'=>(string)$row['username'],'display_name'=>(string)$row['display_name'],'role'=>(string)$row['role']];$_SESSION['user']=$fresh;return $fresh;
+}
 function require_login():array{$u=current_user();if($u===null)redirect_to('login.php');return $u;}
 function require_role(string ...$roles):array{$u=require_login();if(!in_array((string)($u['role']??''),$roles,true)){http_response_code(403);exit('You do not have permission to access this page.');}return $u;}
 function audit_log(?int $actor,string $event,?string $type=null,?string $entity=null,array $details=[]):void{
