@@ -14,7 +14,7 @@ CONFIG_LOCAL = ROOT / "config" / "local.php"
 SCHEMA = ROOT / "database" / "migrations" / "001_initial_schema.sql"
 DB_DEFAULT = ROOT / "storage" / "database" / "staff_sales_auction.sqlite"
 EXPECTED_TABLES = {"users", "auctions", "auction_items", "bids", "audit_events", "login_attempts", "notifications"}
-REQUIRED_EXTENSIONS = ("pdo", "pdo_sqlite", "json", "mbstring")
+REQUIRED_EXTENSIONS = ("pdo", "pdo_sqlite", "json", "mbstring", "fileinfo")
 
 def stop(message: str, code: int = 1) -> None:
     print(f"\nERROR: {message}", file=sys.stderr)
@@ -45,7 +45,7 @@ def main() -> None:
     php = shutil.which("php")
     if not php:
         stop("PHP CLI was not found. Install PHP CLI before continuing.")
-    check = run([php, "-r", "echo PHP_VERSION, \"\\n\"; foreach (['pdo','pdo_sqlite','json','mbstring'] as $e) echo $e, ':', extension_loaded($e) ? 'OK' : 'MISSING', \"\\n\";"], capture=True)
+    check = run([php, "-r", "echo PHP_VERSION, \"\\n\"; foreach (['pdo','pdo_sqlite','json','mbstring','fileinfo'] as $e) echo $e, ':', extension_loaded($e) ? 'OK' : 'MISSING', \"\\n\";"], capture=True)
     if check.returncode != 0:
         stop("PHP CLI could not run. " + (check.stderr or check.stdout or "").strip())
     print(check.stdout.strip())
