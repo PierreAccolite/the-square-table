@@ -4,7 +4,7 @@ This folder is an installation package, not the live database. Run setup on the 
 
 ## Requirements
 - Python 3.8+ (standard library only; no pip packages required).
-- PHP 8.1+ CLI with `pdo`, `pdo_sqlite`, `json` and `mbstring`.
+- PHP 8.1+ CLI with `pdo`, `pdo_sqlite`, `json`, `mbstring` and `fileinfo`.
 - Apache or another PHP-capable web server for browser access.
 - A writable project `storage/` directory for the local database and runtime files.
 
@@ -43,7 +43,7 @@ php tools/check_environment.php
 
 All required extensions should report `OK`, and the schema should report `OK`. The database file should exist under `storage/database/`.
 
-## 5. Configure the web server
+## 5. Configure the web server\n\nFor item-photo uploads, configure PHP with `upload_max_filesize = 6M` and `post_max_size = 8M` (or larger), then reload Apache/PHP-FPM. The application itself accepts images up to 5 MB.
 Set the document root to this project's `public/` directory. Do not expose the project root, `config/`, `database/` or `storage/` through HTTP. Restrict access to the internal company network and enable HTTPS where practical.
 
 The sample configuration enables secure session cookies by default. For isolated localhost-only HTTP testing, set `session_secure` to `false` in `config/local.php`; turn it back on when using HTTPS. Do not use plain HTTP over the company network for real employee passwords.
