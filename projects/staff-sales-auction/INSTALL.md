@@ -35,9 +35,9 @@ Password entry is hidden on Unix-like terminals where terminal control is availa
 
 If the wizard fails after the database has been created, fix the reported issue and run `php tools/create_admin.php` from the project root to retry. It will refuse duplicate usernames. If an administrator already exists, rerunning the Python setup does not create another one.
 
-## 4. Apply the latest additive schema update (existing installations)
+## 4. Apply the latest additive schema update (all installations)
 
-After copying the latest files, run this from the project root to add the item-level buyout configuration fields without resetting the existing database:
+After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout configuration fields. This step is required for both new and existing installations:
 
 ```sh
 php tools/apply_migrations.php
