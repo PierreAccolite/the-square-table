@@ -1,0 +1,39 @@
+<?php
+declare(strict_types=1);
+require dirname(__DIR__,2).'/app/bootstrap.php';
+$user=require_role('admin');
+$error='';
+function valid_new_password(string $password):bool{return strlen($password)>=12;}
+if($_SERVER['REQUEST_METHOD']==='POST'){
+ if(!verify_csrf(isset($_POST['csrf_token'])?(string)$_POST['csrf_token']:null)){http_response_code(400);exit('Invalid request token. Reload and try again.');}
+ $action=(string)($_POST['action']??'');
+ if($action==='create'){
+  $username=trim((string)($_POST['username']??''));$display=trim((string)($_POST['display_name']??''));$employee=trim((string)($_POST['employee_number']??''));$role=(string)($_POST['role']??'employee');$password=(string)($_POST['password']??'');
+  if(!preg_match('/^[A-Za-z0-9._-]{3,80}$/',$username))$error='Username must be 3–80 characters using letters, numbers, dots, underscores or hyphens.';
+  elseif($display===''||mb_strlen($display)>160)$error='Enter a display name of 1–160 characters.';
+  elseif(mb_strlen($employee)>80)$error='Employee number is too long.';
+  elseif(!in_array($role,['employee','admin','auditor'],true))$error='Choose a valid role.';
+  elseif(!valid_new_password($password))$error='Initial password must be at least 12 characters.';
+  else{
+   try{$q=db()->prepare('INSERT INTO users(username,display_name,employee_number,password_hash,role,status) VALUES(:username,:display,:employee,:hash,:role,\'active\')');$q->execute(['username'=>$username,'display'=>$display,'employee'=>$employee!==''?$employee:null,'hash'=>password_hash($password,PASSWORD_DEFAULT),'role'=>$role]);$id=(int)db()->lastInsertId();audit_log((int)$user['id'],'user.created','user',(string)$id,['username'=>$username,'role'=>$role]);redirect_to('admin/users.php?created=1');}
+   catch(PDOException $ex){if(str_contains(strtolower($ex->getMessage()),'unique'))$error='That username or employee number is already in use.';else throw $ex;}
+  }
+ }elseif($action==='status'){
+  $id=(int)($_POST['user_id']??0);$status=(string)($_POST['status']??'');
+  if($id===(int)$user['id'])$error='You cannot disable your own account.';
+  elseif(!in_array($status,['active','disabled'],true))$error='Invalid account status.';
+  else{$q=db()->prepare('UPDATE users SET status=:status,updated_at=datetime(\'now\') WHERE id=:id');$q->execute(['status'=>$status,'id'=>$id]);if($q->rowCount())audit_log((int)$user['id'],'user.status_changed','user',(string)$id,['status'=>$status]);redirect_to('admin/users.php?updated=1');}
+ }elseif($action==='reset_password'){
+  $id=(int)($_POST['user_id']??0);$password=(string)($_POST['password']??'');
+  if(!valid_new_password($password))$error='New password must be at least 12 characters.';
+  else{$q=db()->prepare('UPDATE users SET password_hash=:hash,updated_at=datetime(\'now\') WHERE id=:id');$q->execute(['hash'=>password_hash($password,PASSWORD_DEFAULT),'id'=>$id]);if($q->rowCount()){audit_log((int)$user['id'],'user.password_reset','user',(string)$id);redirect_to('admin/users.php?reset=1');}$error='User account not found.';}
+ }
+}
+$users=db()->query('SELECT id,username,display_name,employee_number,role,status,created_at,last_login_at FROM users ORDER BY display_name COLLATE NOCASE,id')->fetchAll();
+require dirname(__DIR__,2).'/app/layout.php';render_page_start('User management','users',$user);
+?>
+<section class="welcome"><div><p class="eyebrow">ADMINISTRATION</p><h1>User management</h1><p class="muted">Create individual staff accounts, assign access levels, and manage account status.</p></div><div class="welcome-icon">♙</div></section>
+<?php if(isset($_GET['created'])): ?><div class="notice"><span class="notice-dot"></span><div><strong>User created</strong><p>The account is ready for its first sign-in.</p></div></div><?php endif; ?><?php if(isset($_GET['updated'])): ?><div class="notice"><span class="notice-dot"></span><div><strong>Account updated</strong></div></div><?php endif; ?><?php if(isset($_GET['reset'])): ?><div class="notice"><span class="notice-dot"></span><div><strong>Password reset</strong><p>Share the new temporary password with the employee securely.</p></div></div><?php endif; ?><?php if($error!==''): ?><div class="alert" role="alert"><?= e($error) ?></div><?php endif; ?>
+<section class="content-panel"><div class="section-heading"><div><p class="eyebrow">NEW ACCOUNT</p><h2>Create a staff login</h2></div></div><form method="post" class="admin-form"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="create"><div class="form-grid"><div><label for="username">Username</label><input id="username" name="username" required maxlength="80" pattern="[A-Za-z0-9._-]{3,80}"></div><div><label for="display_name">Display name</label><input id="display_name" name="display_name" required maxlength="160"></div><div><label for="employee_number">Employee number <span class="muted">(optional)</span></label><input id="employee_number" name="employee_number" maxlength="80"></div><div><label for="role">Access role</label><select id="role" name="role"><option value="employee">Bidder / employee</option><option value="auditor">Auditor — read-only audit access</option><option value="admin">Administrator</option></select></div></div><label for="password">Initial password</label><input id="password" name="password" type="password" required minlength="12" autocomplete="new-password"><p class="form-help">Use at least 12 characters. The password is hashed before it is stored. There is no self-service password reset yet.</p><button class="button button-primary" type="submit">Create account →</button></form></section>
+<section class="content-panel"><div class="section-heading"><div><p class="eyebrow">REGISTERED USERS</p><h2>Staff accounts</h2></div><span class="status-pill"><?= count($users) ?> accounts</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Staff member</th><th>Username / employee no.</th><th>Role</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody><?php foreach($users as $u): ?><tr><td><strong><?= e($u['display_name']) ?></strong></td><td><?= e($u['username']) ?><small class="table-sub"><?= e($u['employee_number']??'No employee number') ?></small></td><td><span class="status-pill"><?= e(ucfirst($u['role'])) ?></span></td><td><span class="status-pill"><?= e(ucfirst($u['status'])) ?></span></td><td><?= e($u['last_login_at']??'Never') ?></td><td><?php if((int)$u['id']!==(int)$user['id']): ?><form method="post" class="stacked-action" onsubmit="return confirm('Change this account status?');"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="status"><input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>"><input type="hidden" name="status" value="<?= $u['status']==='active'?'disabled':'active' ?>"><button class="button button-quiet" type="submit"><?= $u['status']==='active'?'Disable':'Enable' ?></button></form><details class="reset-details"><summary>Reset password</summary><form method="post" class="reset-form"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="reset_password"><input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>"><label for="pw<?= (int)$u['id'] ?>">New password</label><input id="pw<?= (int)$u['id'] ?>" name="password" type="password" minlength="12" required autocomplete="new-password"><button class="button button-quiet" type="submit">Set password</button></form></details><?php else: ?><span class="muted">Current account</span><?php endif; ?></td></tr><?php endforeach; ?></tbody></table></div></section>
+<?php render_page_end(); ?>
