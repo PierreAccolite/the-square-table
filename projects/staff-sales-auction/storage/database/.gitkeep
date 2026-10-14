@@ -1,0 +1,2 @@
+This directory holds the local SQLite database created by tools/setup_local.py.
+The live database is ignored by Git and must not be committed.
