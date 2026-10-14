@@ -1,4 +1,4 @@
-# Installation — Foundation v0.1
+# Installation — Development release v0.3
 
 This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release is for controlled development/testing only and is not yet a live auction system.
 
@@ -43,7 +43,9 @@ php tools/check_environment.php
 
 All required extensions should report `OK`, and the schema should report `OK`. The database file should exist under `storage/database/`.
 
-## 5. Configure the web server\n\nFor item-photo uploads, configure PHP with `upload_max_filesize = 6M` and `post_max_size = 8M` (or larger), then reload Apache/PHP-FPM. The application itself accepts images up to 5 MB.
+## 5. Configure the web server
+
+For item-photo uploads, configure PHP with `upload_max_filesize = 6M` and `post_max_size = 8M` (or larger), then reload Apache/PHP-FPM. The application itself accepts images up to 5 MB.
 Set the document root to this project's `public/` directory. Do not expose the project root, `config/`, `database/` or `storage/` through HTTP. Restrict access to the internal company network and enable HTTPS where practical.
 
 The sample configuration enables secure session cookies by default. For isolated localhost-only HTTP testing, set `session_secure` to `false` in `config/local.php`; turn it back on when using HTTPS. Do not use plain HTTP over the company network for real employee passwords.
@@ -54,4 +56,4 @@ Make sure the PHP web-server account can read the project files and write to the
 Back up the SQLite database file when no setup/schema changes are running. For an active deployment, use SQLite's online backup API or a short maintenance window rather than copying a database during active writes. Back up uploaded item images separately. Test restoration before relying on the backup.
 
 ## Before production
-Implement and test bid processing, transaction/locking behaviour, anti-sniping, closing/finalisation, admin workflows, backup/restore and security tests. Configure HTTPS, review filesystem permissions and test restores. Do not run a real auction on v0.1.
+Implement and test bid processing, transaction/locking behaviour, anti-sniping, closing/finalisation, admin workflows, backup/restore and security tests. Configure HTTPS, review filesystem permissions and test restores. Do not run a real auction on v0.3.
