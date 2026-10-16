@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/app/bootstrap.php';
+header('Referrer-Policy: no-referrer');
+header('Cache-Control: no-store, private');
 if(current_user()!==null)redirect_to('index.php');
 $token=trim((string)($_GET['token']??$_POST['token']??''));
 $validToken=preg_match('/^[a-f0-9]{64}$/',$token)===1;
