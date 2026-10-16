@@ -1,4 +1,4 @@
-# Test plan — v0.3 development
+# Test plan — v0.5 development
 
 Run on a disposable local SQLite database before internal deployment. Do not conduct a real auction with this release.
 
