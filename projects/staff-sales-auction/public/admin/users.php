@@ -18,7 +18,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   elseif(!valid_new_password($password))$error='Initial password must be at least 12 characters.';
   else{
    try{$q=db()->prepare('INSERT INTO users(username,display_name,employee_number,email,password_hash,role,status) VALUES(:username,:display,:employee,:email,:hash,:role,\'active\')');$q->execute(['username'=>$username,'display'=>$display,'employee'=>$employee!==''?$employee:null,'email'=>$email!==''?$email:null,'hash'=>password_hash($password,PASSWORD_DEFAULT),'role'=>$role]);$id=(int)db()->lastInsertId();save_user_permissions($id,$permissions,(int)$user['id']);audit_log((int)$user['id'],'user.created','user',(string)$id,['username'=>$username,'role'=>$role]);redirect_to('admin/users.php?created=1');}
-   catch(PDOException $ex){if(str_contains(strtolower($ex->getMessage()),'unique'))$error='That username or employee number is already in use.';else throw $ex;}
+   catch(PDOException $ex){if(str_contains(strtolower($ex->getMessage()),'unique'))$error='That username, employee number or email address is already in use.';else throw $ex;}
   }
  }elseif($action==='update_user'){
   $id=(int)($_POST['user_id']??0);$display=trim((string)($_POST['display_name']??''));$employee=trim((string)($_POST['employee_number']??''));$email=trim((string)($_POST['email']??''));$role=(string)($_POST['role']??'employee');$permissions=array_values(array_intersect((array)($_POST['permissions']??[]),['bidder','procurement','custodian','approver']));
@@ -27,11 +27,13 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   elseif($id===(int)$user['id']&&$role!=='admin')$error='You cannot remove administrator access from your own account.';
   elseif($display===''||mb_strlen($display)>160)$error='Enter a display name of 1–160 characters.';
   elseif(mb_strlen($employee)>80)$error='Employee number is too long.';
+  elseif($email!==''&&!filter_var($email,FILTER_VALIDATE_EMAIL))$error='Enter a valid email address or leave it blank.';
+  elseif(strlen($email)>254)$error='Email address is too long.';
   elseif(!in_array($role,['employee','admin','auditor'],true))$error='Choose a valid role.';
   else{
    $activeAdmins=(int)db()->query("SELECT COUNT(*) FROM users WHERE role='admin' AND status='active'")->fetchColumn();
    if($target['role']==='admin'&&$target['status']==='active'&&$role!=='admin'&&$activeAdmins<=1)$error='You cannot remove the last active administrator.';
-   else{try{$q=db()->prepare('UPDATE users SET display_name=:display,employee_number=:employee,email=:email,role=:role,updated_at=datetime(\'now\') WHERE id=:id');$q->execute(['display'=>$display,'employee'=>$employee!==''?$employee:null,'email'=>$email!==''?$email:null,'role'=>$role,'id'=>$id]);save_user_permissions($id,$permissions,(int)$user['id']);audit_log((int)$user['id'],'user.details_updated','user',(string)$id,['role'=>$role,'permissions'=>$permissions]);redirect_to('admin/users.php?updated=1');}catch(PDOException $ex){if(str_contains(strtolower($ex->getMessage()),'unique'))$error='That employee number is already assigned to another account.';else throw $ex;}}
+   else{try{$q=db()->prepare('UPDATE users SET display_name=:display,employee_number=:employee,email=:email,role=:role,updated_at=datetime(\'now\') WHERE id=:id');$q->execute(['display'=>$display,'employee'=>$employee!==''?$employee:null,'email'=>$email!==''?$email:null,'role'=>$role,'id'=>$id]);save_user_permissions($id,$permissions,(int)$user['id']);audit_log((int)$user['id'],'user.details_updated','user',(string)$id,['role'=>$role,'permissions'=>$permissions]);redirect_to('admin/users.php?updated=1');}catch(PDOException $ex){if(str_contains(strtolower($ex->getMessage()),'unique'))$error='That employee number or email address is already assigned to another account.';else throw $ex;}}
   }
  }elseif($action==='status'){
   $id=(int)($_POST['user_id']??0);$status=(string)($_POST['status']??'');
