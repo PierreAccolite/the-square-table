@@ -75,4 +75,4 @@ Reset links expire after 30 minutes and are single-use. If mail transport is not
 Back up the SQLite database file when no setup/schema changes are running. For an active deployment, use SQLite's online backup API or a short maintenance window rather than copying a database during active writes. Back up uploaded item images separately. Test restoration before relying on the backup.
 
 ## Before production
-Implement and test bid processing, transaction/locking behaviour, anti-sniping, closing/finalisation, admin workflows, backup/restore and security tests. Configure HTTPS, review filesystem permissions and test restores. Do not run a real auction on v0.5.
+Implement and test bid processing, transaction/locking behaviour, anti-sniping, closing/finalisation, admin workflows, backup/restore and security tests. Configure HTTPS, review filesystem permissions and test restores. Do not run a real auction on v0.6.
