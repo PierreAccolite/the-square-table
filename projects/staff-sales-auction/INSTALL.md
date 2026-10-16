@@ -1,4 +1,4 @@
-# Installation — Development release v0.4
+# Installation — Development release v0.5
 
 This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release is for controlled development/testing only and is not yet a live auction system.
 
@@ -37,13 +37,13 @@ If the wizard fails after the database has been created, fix the reported issue 
 
 ## 4. Apply the latest additive schema update (all installations)
 
-After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout configuration fields. This step is required for both new and existing installations:
+After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout fields, permission assignments and approval queue. This step is required for both new and existing installations:
 
 ```sh
 php tools/apply_migrations.php
 ```
 
-The update is safe to rerun and preserves existing item records. It stores whether buyout is offered and the configured price only. Buyout transactions are not enabled yet. Do not rerun the initial setup script just to apply this update.
+The update is safe to rerun and preserves existing records. It adds the buyout fields, independent permission assignments and the item-change approval queue. Buyout transactions are not enabled yet. Do not rerun the initial setup script just to apply this update.
 
 ## 5. Verify the installation
 
@@ -66,4 +66,4 @@ Make sure the PHP web-server account can read the project files and write to the
 Back up the SQLite database file when no setup/schema changes are running. For an active deployment, use SQLite's online backup API or a short maintenance window rather than copying a database during active writes. Back up uploaded item images separately. Test restoration before relying on the backup.
 
 ## Before production
-Implement and test bid processing, transaction/locking behaviour, anti-sniping, closing/finalisation, admin workflows, backup/restore and security tests. Configure HTTPS, review filesystem permissions and test restores. Do not run a real auction on v0.4.
+Implement and test bid processing, transaction/locking behaviour, anti-sniping, closing/finalisation, admin workflows, backup/restore and security tests. Configure HTTPS, review filesystem permissions and test restores. Do not run a real auction on v0.5.
