@@ -1,4 +1,4 @@
-# Installation — Development release v0.5
+# Installation — Development release v0.6
 
 This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release is for controlled development/testing only and is not yet a live auction system.
 
@@ -43,7 +43,7 @@ After the initial setup and after copying the latest files, run this from the pr
 php tools/apply_migrations.php
 ```
 
-The update is safe to rerun and preserves existing records. It adds the buyout fields, independent permission assignments and the item-change approval queue. Buyout transactions are not enabled yet. Do not rerun the initial setup script just to apply this update.
+The update is safe to rerun and preserves existing records. It adds the buyout fields, independent permission assignments, item-change approval queue, staff email addresses and password-reset tokens. Buyout transactions are not enabled yet. Do not rerun the initial setup script just to apply this update.
 
 ## 5. Verify the installation
 
@@ -61,6 +61,15 @@ Set the document root to this project's `public/` directory. Do not expose the p
 The sample configuration enables secure session cookies by default. For isolated localhost-only HTTP testing, set `session_secure` to `false` in `config/local.php`; turn it back on when using HTTPS. Do not use plain HTTP over the company network for real employee passwords.
 
 Make sure the PHP web-server account can read the project files and write to the SQLite database directory. The database must remain outside the web root.
+
+### Email delivery for password resets
+
+1. In `config/local.php`, set `mail_from` to a real sender address accepted by your server, for example `'mail_from' => 'staff-sales@your-company-domain'`.
+2. Ensure PHP's `mail()` can hand messages to a configured local mail transport (such as the server's existing Postfix setup). This application does not connect directly to an SMTP server or store SMTP credentials.
+3. In **Users**, add a unique email address to each employee account. Existing accounts have no email address until you populate it.
+4. Test a reset request with a controlled staff account before relying on it. The page intentionally shows the same confirmation whether an account exists or not.
+
+Reset links expire after 30 minutes and are single-use. If mail transport is not configured, the portal will not be able to deliver reset links.
 
 ## 7. Back up and restore
 Back up the SQLite database file when no setup/schema changes are running. For an active deployment, use SQLite's online backup API or a short maintenance window rather than copying a database during active writes. Back up uploaded item images separately. Test restoration before relying on the backup.
