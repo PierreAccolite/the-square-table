@@ -1,0 +1,32 @@
+name: Staff Sales Auction PHP syntax
+
+on:
+  push:
+    paths:
+      - "projects/staff-sales-auction/**/*.php"
+      - ".github/workflows/staff-sales-auction-php-lint.yml"
+  pull_request:
+    paths:
+      - "projects/staff-sales-auction/**/*.php"
+      - ".github/workflows/staff-sales-auction-php-lint.yml"
+
+jobs:
+  php-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: mbstring, pdo_sqlite, fileinfo
+          coverage: none
+      - name: Lint all project PHP files
+        shell: bash
+        run: |
+          set -euo pipefail
+          find projects/staff-sales-auction/app projects/staff-sales-auction/public projects/staff-sales-auction/tools -type f -name '*.php' -print0 |
+            while IFS= read -r -d '' file; do
+              php -l "$file"
+            done
