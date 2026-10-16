@@ -1,4 +1,4 @@
-# Test plan — v0.5 development
+# Test plan — v0.6 development
 
 Run on a disposable local SQLite database before internal deployment. Do not conduct a real auction with this release.
 
@@ -15,6 +15,17 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] Logout invalidates the session.
 - [ ] SQLite foreign-key enforcement is enabled for each connection.
 - [ ] Local configuration and runtime database files are not tracked.
+
+## Self-service password reset
+- [ ] User with a registered email can request a reset without revealing whether the account exists.
+- [ ] Unknown, disabled, invalid-email and unregistered-email requests show the same confirmation.
+- [ ] Reset token is stored as a hash, expires after 30 minutes, and cannot be reused.
+- [ ] Re-requesting a reset invalidates prior unused tokens for that account.
+- [ ] Passwords shorter than 12 characters and mismatched confirmations are rejected.
+- [ ] Successful reset changes the password, consumes outstanding tokens, and records an audit event.
+- [ ] Reset request is rate-limited to three token creations per account per hour.
+- [ ] Missing mail configuration is logged without exposing account existence.
+- [ ] Email addresses are unique, optional, and editable by administrators.
 
 ## Auction catalogue
 - [ ] Admin can create an auction draft with title, description and planned dates.
