@@ -30,6 +30,27 @@ function current_user():?array{
 }
 function require_login():array{$u=current_user();if($u===null)redirect_to('login.php');return $u;}
 function require_role(string ...$roles):array{$u=require_login();if(!in_array((string)($u['role']??''),$roles,true)){http_response_code(403);exit('You do not have permission to access this page.');}return $u;}
+
+function user_permissions(int $userId):array{
+ static $cache=[];if(isset($cache[$userId]))return $cache[$userId];
+ try{$q=db()->prepare('SELECT permission FROM user_permissions WHERE user_id=:id ORDER BY permission');$q->execute(['id'=>$userId]);return $cache[$userId]=array_values(array_map('strval',$q->fetchAll(PDO::FETCH_COLUMN));}
+ catch(Throwable $ex){return $cache[$userId]=[];}
+}
+function has_permission(array $user,string $permission):bool{
+ if(($user['role']??'')==='admin')return true;
+ if($permission==='bidder'&&in_array(($user['role']??''),['employee','admin'],true))return true;
+ return in_array($permission,user_permissions((int)($user['id']??0)),true);
+}
+function require_permission(string ...$permissions):array{
+ $u=require_login();foreach($permissions as $permission){if(has_permission($u,$permission))return $u;}
+ http_response_code(403);exit('You do not have permission to access this page.');
+}
+function save_user_permissions(int $userId,array $permissions,int $actorId):void{
+ $allowed=['bidder','procurement','custodian','approver'];$permissions=array_values(array_unique(array_intersect($permissions,$allowed)));
+ $pdo=db();$pdo->prepare('DELETE FROM user_permissions WHERE user_id=:id')->execute(['id'=>$userId]);
+ $q=$pdo->prepare('INSERT INTO user_permissions(user_id,permission,granted_by) VALUES(:id,:permission,:actor)');
+ foreach($permissions as $permission)$q->execute(['id'=>$userId,'permission'=>$permission,'actor'=>$actorId]);
+}
 function audit_log(?int $actor,string $event,?string $type=null,?string $entity=null,array $details=[]):void{
  try{$s=db()->prepare('INSERT INTO audit_events(actor_user_id,event_type,entity_type,entity_id,ip_address,user_agent,details_json) VALUES(:actor,:event,:type,:entity,:ip,:agent,:details)');
  $s->execute(['actor'=>$actor,'event'=>$event,'type'=>$type,'entity'=>$entity,'ip'=>substr((string)($_SERVER['REMOTE_ADDR']??''),0,45)?:null,'agent'=>substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,500)?:null,'details'=>json_encode($details,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
