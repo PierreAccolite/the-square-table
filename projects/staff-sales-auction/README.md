@@ -32,7 +32,7 @@ php tools/check_environment.php
 
 See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 
-## Included in v0.5 development
+## Included in v0.6 development
 - SQLite schema and local setup wizard.
 - Login/logout foundation, password hashing, CSRF tokens, secure session settings and basic login throttling.
 - Employee dashboard with a staff catalogue entry point.
@@ -48,6 +48,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Item-level buyout toggle and configured buyout price; purchase transactions remain disabled.
 - Recorded bid counts on staff catalogue cards and the admin item list.
 - Independent bidder, procurement, custodian and approver permissions, combinable per account.
+- Self-service password reset with single-use hashed tokens, 30-minute expiry, generic responses and rate limiting; requires staff email addresses and mail transport configuration.
 - Procurement/custodian item-change requests with reason, before/after comparison, separate-person approval, stale-request protection and audit logging.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
@@ -62,7 +63,6 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Anti-sniping execution.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - Live bid-processing and automatic close/finalisation are not implemented yet.
-- Self-service password reset uses single-use, hashed tokens with a 30-minute expiry. Staff email addresses and a working mail transport must be configured.
 - End-of-auction winner-result emails remain planned until bid processing and an auditable auction-finalisation workflow exist.
 - Buyout/purchase-now transactions remain disabled.
 - Award/finalisation workflow, winner notifications, and production security certification.
