@@ -33,7 +33,7 @@ function require_role(string ...$roles):array{$u=require_login();if(!in_array((s
 
 function user_permissions(int $userId):array{
  static $cache=[];if(isset($cache[$userId]))return $cache[$userId];
- try{$q=db()->prepare('SELECT permission FROM user_permissions WHERE user_id=:id ORDER BY permission');$q->execute(['id'=>$userId]);return $cache[$userId]=array_values(array_map('strval',$q->fetchAll(PDO::FETCH_COLUMN));}
+ try{$q=db()->prepare('SELECT permission FROM user_permissions WHERE user_id=:id ORDER BY permission');$q->execute(['id'=>$userId]);return $cache[$userId]=array_values(array_map('strval',$q->fetchAll(PDO::FETCH_COLUMN)));}
  catch(Throwable $ex){return $cache[$userId]=[];}
 }
 function has_permission(array $user,string $permission):bool{
