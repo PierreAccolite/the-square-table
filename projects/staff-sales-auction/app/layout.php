@@ -3,6 +3,7 @@ declare(strict_types=1);
 function render_page_start(string $title,string $activeNav,array $user):void{
  $admin=($user['role']??'')==='admin';
  $auditor=($user['role']??'')==='auditor';
+ $canApprove=has_permission($user,'approver');
  $nav=[
   ['key'=>'dashboard','label'=>'Dashboard','url'=>'index.php','roles'=>['employee','admin','auditor']],
   ['key'=>'catalogue','label'=>'Staff catalogue','url'=>'auctions.php','roles'=>['employee','admin','auditor']],
@@ -20,6 +21,7 @@ function render_page_start(string $title,string $activeNav,array $user):void{
   $nav[]=['key'=>'audit','label'=>'Audit log','url'=>'admin/audit.php','roles'=>['auditor']];
   $nav[]=['key'=>'reports','label'=>'Reports','url'=>'admin/reports.php','roles'=>['auditor']];
  }
+ if($canApprove)$nav[]=['key'=>'approvals','label'=>'Approvals','url'=>'admin/approvals.php','roles'=>['approver']];
  ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($title) ?> · Staff Sales</title><link rel="stylesheet" href="<?= e(app_url('assets/css/app.css')) ?>"></head><body class="app-body">
  <header class="app-navbar"><a class="brand" href="<?= e(app_url('index.php')) ?>"><span class="brand-mark">SS</span><span><strong>Staff Sales</strong><small>Internal auction portal</small></span></a>
  <nav class="primary-nav" aria-label="Main navigation"><?php foreach($nav as $item): ?><a class="nav-link<?= $activeNav===$item['key']?' is-active':'' ?>" href="<?= e(app_url($item['url'])) ?>"<?= $activeNav===$item['key']?' aria-current="page"':'' ?>><?= e($item['label']) ?></a><?php endforeach; ?></nav>
