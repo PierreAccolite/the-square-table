@@ -1,6 +1,6 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.4.0 — reporting and bulk account administration  
+**Version:** 0.5.0 — multi-permission access and procurement approvals  
 **Status:** Internal development/testing only; live bidding is not enabled.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
@@ -47,6 +47,8 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Read-only admin/auditor reports for auction summaries, item catalogues, bid activity and user accounts, with CSV exports.
 - Item-level buyout toggle and configured buyout price; purchase transactions remain disabled.
 - Recorded bid counts on staff catalogue cards and the admin item list.
+- Independent bidder, procurement, custodian and approver permissions, combinable per account.
+- Procurement/custodian item-change requests with reason, before/after comparison, separate-person approval, stale-request protection and audit logging.
 - Read-only admin/auditor reports for auctions, catalogue items, bid activity and user accounts, with CSV exports.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
@@ -61,8 +63,8 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Anti-sniping execution.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - No automated bid-processing workflow yet.
-- Self-service password reset emails, procurement/custodian approval permissions and end-of-auction winner emails remain planned; these need secure token handling, approval-state design and mail transport configuration.
-- Buyout/purchase-now, item bid counters, procurement approval permissions, self-service password reset tokens and winner-result emails are still planned; these need additional schema and mail-transport configuration.
+- Self-service password reset emails and end-of-auction winner emails remain planned; these need secure token handling and mail transport configuration.
+- Buyout/purchase-now transactions, self-service password reset tokens and winner-result emails are still planned; these need further implementation and mail-transport configuration.
 - Award/finalisation workflow, winner notifications, and production security certification.
 
 **Important:** scheduling currently makes the catalogue visible; it does not open bidding. Do not use this release to conduct a real auction.
