@@ -56,3 +56,10 @@ function audit_log(?int $actor,string $event,?string $type=null,?string $entity=
  $s->execute(['actor'=>$actor,'event'=>$event,'type'=>$type,'entity'=>$entity,'ip'=>substr((string)($_SERVER['REMOTE_ADDR']??''),0,45)?:null,'agent'=>substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,500)?:null,'details'=>json_encode($details,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
  }catch(Throwable $ex){error_log('Staff Sales audit write failed: '.$ex->getMessage());if((string)app_config('app_env')==='production')throw $ex;}
 }
+function send_app_email(string $to,string $subject,string $body):bool{
+ $to=trim($to);$from=trim((string)app_config('mail_from'));
+ if(!filter_var($to,FILTER_VALIDATE_EMAIL)||!filter_var($from,FILTER_VALIDATE_EMAIL))return false;
+ $subject=str_replace(["\r","\n"],' ',$subject);
+ $headers=['From: '.$from,'MIME-Version: 1.0','Content-Type: text/plain; charset=UTF-8','X-Content-Type-Options: nosniff'];
+ return mail($to,$subject,$body,implode("\r\n",$headers));
+}
