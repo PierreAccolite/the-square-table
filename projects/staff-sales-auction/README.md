@@ -1,6 +1,6 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.5.0 — multi-permission access and procurement approvals  
+**Version:** 0.6.0 — procurement approvals and self-service password reset  
 **Status:** Internal development/testing only; live bidding is not enabled.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
@@ -62,8 +62,9 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Anti-sniping execution.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - Live bid-processing and automatic close/finalisation are not implemented yet.
-- Self-service password reset emails and end-of-auction winner emails remain planned; these need secure token handling and mail transport configuration.
-- Buyout/purchase-now transactions, self-service password reset tokens and winner-result emails are still planned; these need further implementation and mail-transport configuration.
+- Self-service password reset uses single-use, hashed tokens with a 30-minute expiry. Staff email addresses and a working mail transport must be configured.
+- End-of-auction winner-result emails remain planned until bid processing and an auditable auction-finalisation workflow exist.
+- Buyout/purchase-now transactions remain disabled.
 - Award/finalisation workflow, winner notifications, and production security certification.
 
 **Important:** scheduling currently makes the catalogue visible; it does not open bidding. Do not use this release to conduct a real auction.
