@@ -24,5 +24,13 @@ try{
  $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'003_permissions_approvals']);
  $pdo->commit();
 }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
-echo "Migrations 002 and 003 applied or already present. Existing data preserved.\n";
-echo "Procurement permissions and item-change approval queue are now available; bidding and buyout transactions remain disabled.\n";
+// Migration 004: user email addresses and expiring, single-use password-reset tokens.
+$userColumns=$pdo->query('PRAGMA table_info(users)')->fetchAll();
+$userColumnNames=array_column($userColumns,'name');
+if(!in_array('email',$userColumnNames,true))$pdo->exec('ALTER TABLE users ADD COLUMN email TEXT');
+$pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email COLLATE NOCASE) WHERE email IS NOT NULL AND email <> ''");
+$pdo->exec("CREATE TABLE IF NOT EXISTS password_reset_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,used_at TEXT,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_password_reset_user_expiry ON password_reset_tokens(user_id,expires_at,used_at)');
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'004_password_reset']);
+echo "Migrations 002, 003 and 004 applied or already present. Existing data preserved.\\n";
+echo "Permissions, approvals, email addresses and password reset tokens are available; live bidding remains disabled.\\n";
