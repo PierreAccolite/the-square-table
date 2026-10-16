@@ -37,7 +37,7 @@ If the wizard fails after the database has been created, fix the reported issue 
 
 ## 4. Apply the latest additive schema update (all installations)
 
-After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout fields, permission assignments and approval queue. This step is required for both new and existing installations:
+After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout fields, permission assignments, approval queue, email addresses and password-reset tokens. This step is required for both new and existing installations:
 
 ```sh
 php tools/apply_migrations.php
