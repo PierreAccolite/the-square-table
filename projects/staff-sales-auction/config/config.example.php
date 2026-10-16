@@ -7,6 +7,7 @@ return [
  'base_path'=>'',
  'timezone'=>'Africa/Windhoek',
  'session_secure'=>true,
+ 'mail_from'=>'no-reply@example.internal', // Replace with an address accepted by the configured mail transport.
  'db'=>[
   'driver'=>'sqlite',
   'path'=>dirname(__DIR__).'/storage/database/staff_sales_auction.sqlite',
