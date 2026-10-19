@@ -50,6 +50,26 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] The last active administrator cannot be disabled or demoted.
 - [ ] Employee can view only their own bid history and notifications.
 
+## Bidding and auction finalisation (v0.7 — test on a disposable database)
+- [ ] Bid form is shown only to a signed-in bidder while the auction time window is active.
+- [ ] Server rejects bids before the start time and at/after the closing deadline.
+- [ ] First accepted bid must meet the opening price; later bids must meet current high bid plus minimum increment.
+- [ ] Malformed amounts, negative values, excessive precision and invalid request IDs are rejected.
+- [ ] Replaying the same client request ID cannot create a second bid.
+- [ ] Concurrent bids are serialized and cannot both pass using the same stale high bid.
+- [ ] A valid bid with two minutes or less remaining extends the closing deadline by two minutes.
+- [ ] A bid outside the anti-sniping window does not change the deadline.
+- [ ] Accepted bids and anti-sniping changes are audited.
+- [ ] Public catalogue and bidder pages never disclose another bidder's identity.
+- [ ] Expired auctions reject new bids even if the CLI finaliser has not yet run.
+- [ ] CLI finalisation closes expired auctions and creates exactly one result per published item.
+- [ ] Highest accepted bid wins; an item without bids is marked unsold.
+- [ ] Re-running finalisation does not duplicate results or internal winner notifications.
+- [ ] My Results exposes only the signed-in user's own outcomes.
+- [ ] Admin results and CSV reports include final price and notification status.
+- [ ] Missing/invalid winner email is recorded as no_email; mail transport failures are retryable.
+- [ ] A configured cron run executes the finalisation job under the web application's OS account.
+
 ## Editing and images
 - [ ] Draft and published items can be edited by an administrator.
 - [ ] Awarded items are locked against editing.
@@ -60,4 +80,4 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] Draft or scheduled auctions can be edited; closed/open/cancelled auctions are locked.
 
 ## Not implemented and therefore not testable yet
-Simultaneous bid handling, minimum bid validation, opening-price enforcement, deadline boundary, anti-sniping, idempotent retries, automatic closing/finalisation, winner selection, notifications and audit verification.
+Live countdown/polling across browser sessions, buyout transactions, payment settlement, collection tracking and production security certification remain outside this milestone.
