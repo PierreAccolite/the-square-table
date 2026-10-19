@@ -1,7 +1,7 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.6.0 — procurement approvals and self-service password reset  
-**Status:** Internal development/testing only; live bidding is not enabled.
+**Version:** 0.7.0 — transactional bidding, auction closing and final results  
+**Status:** Internal development/testing only; live bidding is implemented but must be validated before any real auction.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
 
@@ -44,7 +44,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Shared sticky navigation that adapts to employee, administrator and auditor roles.
 - Admin user management: create accounts, edit staff details and roles, enable/disable accounts, and reset passwords.
 - CSV bulk user import with row-level validation, duplicate detection and audit events.
-- Read-only admin/auditor reports for auction summaries, item catalogues, bid activity and user accounts, with CSV exports.
+- Read-only admin/auditor reports for auction summaries, item catalogues, bid activity, final auction results and user accounts, with CSV exports.
 - Item-level buyout toggle and configured buyout price; purchase transactions remain disabled.
 - Recorded bid counts on staff catalogue cards and the admin item list.
 - Independent bidder, procurement, custodian and approver permissions, combinable per account.
@@ -54,20 +54,20 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
 - Staff catalogue displays item photos through an authenticated image endpoint.
 - Personal bid-history page, notification inbox, and read-only audit log.
-- Signed-in employees can browse published items in scheduled auctions.
+- Signed-in employees can browse published items in scheduled/open auctions, see live price/countdown updates, and submit bids.
+- Transactional server-side bid validation, per-item bid history and two-minute anti-sniping extensions.
+- Automatic opening of scheduled auctions and idempotent close/finalisation with immutable sold/unsold result records.
+- Staff-facing final results page that hides other bidders' identities; winner identities and detailed bid activity remain admin/auditor-only.
+- CLI scheduler at `tools/close_auctions.php`; configure cron so auctions finalise even when nobody is browsing.
 - Audit events for auction and item creation and auction scheduling.
 
 ## Not included yet
-- Bid submission and transactional bid validation.
-- Automatic auction opening/closing, live countdown or polling.
-- Anti-sniping execution.
+- Buyout/purchase-now transactions, despite the configurable catalogue option.
+- Winner email notifications and payment/collection settlement workflows.
 - Item deletion is intentionally not offered; items can be withdrawn.
-- Live bid-processing and automatic close/finalisation are not implemented yet.
-- End-of-auction winner-result emails remain planned until bid processing and an auditable auction-finalisation workflow exist.
-- Buyout/purchase-now transactions remain disabled.
-- Award/finalisation workflow, winner notifications, and production security certification.
+- Production security certification and a completed multi-user concurrency/restore test cycle.
 
-**Important:** scheduling currently makes the catalogue visible; it does not open bidding. Do not use this release to conduct a real auction.
+**Important:** this remains a development/testing release. Do not use it to conduct a real auction until the bid, closing, result, backup/restore and security test plan has passed.
 
 ## Layout
 - `public/` — web-accessible entry points and assets only.
