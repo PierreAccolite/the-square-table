@@ -1,7 +1,7 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.6.0 — procurement approvals and self-service password reset  
-**Status:** Internal development/testing only; live bidding is not enabled.
+**Version:** 0.7.0 — transactional bidding and auction results  
+**Status:** Internal development/testing only; bidding and result finalisation are implemented for controlled testing, not real auctions.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
 
@@ -9,8 +9,10 @@ A new, independent internal staff auction application in the Square Table projec
 - Internal company network only; individual portal-managed employee accounts.
 - PHP 8.1+ with PDO SQLite; no separate database service required.
 - A local SQLite database stored under `storage/database/`, outside the public web root.
-- Server-side bid validation and transactional processing before live bidding is enabled.
+- Server-side bid validation and transactional processing.
 - Full accepted-bid history and audit events.
+- SQLite write-locked bid acceptance, server-side price/deadline validation, and idempotent request identifiers.
+- One-time item-level results, private bidder results, administrator results and CSV result reporting.
 - Anti-sniping: a valid accepted bid with **two minutes or less remaining** resets the deadline to two minutes from acceptance.
 - Ordinary employees see prices and auction status, not other bidders' identities.
 - The project folder is an installation package. The live database and local configuration are created on the target machine and are not committed to GitHub.
@@ -32,7 +34,7 @@ php tools/check_environment.php
 
 See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 
-## Included in v0.6 development
+## Included in v0.7 development
 - SQLite schema and local setup wizard.
 - Login/logout foundation, password hashing, CSRF tokens, secure session settings and basic login throttling.
 - Employee dashboard with a staff catalogue entry point.
@@ -49,6 +51,10 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Recorded bid counts on staff catalogue cards and the admin item list.
 - Independent bidder, procurement, custodian and approver permissions, combinable per account.
 - Self-service password reset with single-use hashed tokens, 30-minute expiry, generic responses and rate limiting; requires staff email addresses and mail transport configuration.
+- Server-validated bidding with opening-price/minimum-increment enforcement and two-minute anti-sniping extensions.
+- CLI closing/finalisation job with unique result rows, internal winner notifications, and retryable winner-email delivery.
+- Private My Results page and administrator results dashboard.
+- Auction results and final-price CSV report.
 - Procurement/custodian item-change requests with reason, before/after comparison, separate-person approval, stale-request protection and audit logging.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
@@ -58,16 +64,13 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Audit events for auction and item creation and auction scheduling.
 
 ## Not included yet
-- Bid submission and transactional bid validation.
-- Automatic auction opening/closing, live countdown or polling.
-- Anti-sniping execution.
+- The catalogue refreshes current bids and minimums every 10 seconds; a live countdown timer is not included.
+- Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing.
 - Item deletion is intentionally not offered; items can be withdrawn.
-- Live bid-processing and automatic close/finalisation are not implemented yet.
-- End-of-auction winner-result emails remain planned until bid processing and an auditable auction-finalisation workflow exist.
 - Buyout/purchase-now transactions remain disabled.
-- Award/finalisation workflow, winner notifications, and production security certification.
+- Payment settlement, collection tracking, live countdown timer and production security certification.
 
-**Important:** scheduling currently makes the catalogue visible; it does not open bidding. Do not use this release to conduct a real auction.
+**Important:** this remains a development/testing release. Bidding is enabled in code but has not been certified for real-money or business-critical auctions. Configure the finalisation job, verify mail transport, test backups/restore and exercise the test checklist on a disposable database before any operational use. Scheduling makes published catalogue items visible; the server opens bidding according to the configured start time.
 
 ## Layout
 - `public/` — web-accessible entry points and assets only.

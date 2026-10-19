@@ -32,5 +32,27 @@ $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(em
 $pdo->exec("CREATE TABLE IF NOT EXISTS password_reset_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,used_at TEXT,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_password_reset_user_expiry ON password_reset_tokens(user_id,expires_at,used_at)');
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'004_password_reset']);
-echo "Migrations 002, 003 and 004 applied or already present. Existing data preserved.\n";
-echo "Permissions, approvals, email addresses and password reset tokens are available; live bidding remains disabled.\n";
+// Migration 005: durable results and retryable winner notification state.
+$pdo->exec("CREATE TABLE IF NOT EXISTS auction_results (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ auction_item_id INTEGER NOT NULL UNIQUE,
+ auction_id INTEGER NOT NULL,
+ result_status TEXT NOT NULL CHECK(result_status IN ('sold','unsold')),
+ winning_bid_id INTEGER,
+ winner_user_id INTEGER,
+ final_price_cents INTEGER NOT NULL DEFAULT 0 CHECK(final_price_cents >= 0),
+ finalized_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),
+ email_status TEXT NOT NULL DEFAULT 'not_applicable' CHECK(email_status IN ('not_applicable','pending','sent','failed','no_email')),
+ email_sent_at TEXT,
+ email_last_error TEXT,
+ FOREIGN KEY(auction_item_id) REFERENCES auction_items(id) ON DELETE RESTRICT,
+ FOREIGN KEY(auction_id) REFERENCES auctions(id) ON DELETE RESTRICT,
+ FOREIGN KEY(winning_bid_id) REFERENCES bids(id) ON DELETE RESTRICT,
+ FOREIGN KEY(winner_user_id) REFERENCES users(id) ON DELETE RESTRICT
+)");
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_auction ON auction_results(auction_id,result_status,finalized_at)');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_winner ON auction_results(winner_user_id,finalized_at)');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_email ON auction_results(email_status,finalized_at)');
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'005_auction_results']);
+echo "Migrations 002, 003, 004 and 005 applied or already present. Existing data preserved.\n";
+echo "Permissions, approvals, password reset, bidding and auction result storage are available. Configure a scheduled CLI run for automatic finalisation.\n";

@@ -134,7 +134,7 @@ def main() -> None:
         stop("The final check did not pass. Review the output above.")
     print("\nSetup complete. No default password was created.")
     print("Next: configure your web server document root to this project's public/ directory.")
-    print("Important: this is foundation v0.1; live bidding is not implemented yet.")
+    print("Important: this is development release v0.7. Run php tools/apply_migrations.php after setup/copying files, then configure the auction finalisation job before controlled bidding tests.")
 
 if __name__ == "__main__":
     main()
