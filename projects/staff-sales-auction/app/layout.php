@@ -9,11 +9,13 @@ function render_page_start(string $title,string $activeNav,array $user):void{
   ['key'=>'dashboard','label'=>'Dashboard','url'=>'index.php','roles'=>['employee','admin','auditor']],
   ['key'=>'catalogue','label'=>'Staff catalogue','url'=>'auctions.php','roles'=>['employee','admin','auditor']],
   ['key'=>'my-bids','label'=>'My bids','url'=>'my-bids.php','roles'=>['employee','admin']],
+  ['key'=>'my-results','label'=>'My results','url'=>'my-results.php','roles'=>['employee','admin']],
   ['key'=>'notifications','label'=>'Notifications','url'=>'notifications.php','roles'=>['employee','admin','auditor']],
  ];
  if($admin){
   $nav[]=['key'=>'admin','label'=>'Overview','url'=>'admin/index.php','roles'=>['admin']];
   $nav[]=['key'=>'auctions','label'=>'Auctions','url'=>'admin/auctions.php','roles'=>['admin']];
+  $nav[]=['key'=>'results','label'=>'Results','url'=>'admin/results.php','roles'=>['admin']];
   $nav[]=['key'=>'users','label'=>'Users','url'=>'admin/users.php','roles'=>['admin']];
   $nav[]=['key'=>'bulk-users','label'=>'Bulk upload','url'=>'admin/bulk-users.php','roles'=>['admin']];
   $nav[]=['key'=>'reports','label'=>'Reports','url'=>'admin/reports.php','roles'=>['admin']];
