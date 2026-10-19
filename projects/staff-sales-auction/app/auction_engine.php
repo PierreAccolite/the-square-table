@@ -21,12 +21,11 @@ function auction_high_bid(int $itemId): ?array {
 /**
  * Finalise every expired scheduled/open auction using a write lock.
  * Results are unique per item, so repeated cron runs cannot create duplicate winners.
- * Returns result rows whose winner email should be attempted.
+ * Attempts queued winner emails after committing final results.
  */
-function finalise_expired_auctions(): array {
+function finalise_expired_auctions(): void {
     $pdo=db();
     $now=auction_now();
-    $emailJobs=[];
     $pdo->exec('BEGIN IMMEDIATE');
     try {
         $q=$pdo->prepare("SELECT id,title FROM auctions WHERE status IN ('scheduled','open') AND ends_at IS NOT NULL AND ends_at<=:now ORDER BY id");
@@ -103,5 +102,4 @@ function finalise_expired_auctions(): array {
             $pdo->prepare("UPDATE auction_results SET email_status='failed',email_last_error='Notification attempt failed; see server log' WHERE id=:id")->execute(['id'=>(int)$job['id']]);
         }
     }
-    return $emailJobs;
 }
