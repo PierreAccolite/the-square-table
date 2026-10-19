@@ -1,6 +1,6 @@
-# Installation — Development release v0.6
+# Installation — Development release v0.7
 
-This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release is for controlled development/testing only and is not yet a live auction system.
+This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). The bid-processing, auction-closing and results workflow is available for controlled development/testing; this is not production-certified.
 
 ## Requirements
 - Python 3.8+ (standard library only; no pip packages required).
@@ -37,13 +37,13 @@ If the wizard fails after the database has been created, fix the reported issue 
 
 ## 4. Apply the latest additive schema update (all installations)
 
-After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout fields, permission assignments, approval queue, email addresses and password-reset tokens. This step is required for both new and existing installations:
+After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout fields, permission assignments, approval queue, email addresses, password-reset tokens and persistent auction results. This step is required for both new and existing installations:
 
 ```sh
 php tools/apply_migrations.php
 ```
 
-The update is safe to rerun and preserves existing records. It adds the buyout fields, independent permission assignments, item-change approval queue, staff email addresses and password-reset tokens. Buyout transactions are not enabled yet. Do not rerun the initial setup script just to apply this update.
+The update is safe to rerun and preserves existing records. It adds the buyout fields, independent permission assignments, item-change approval queue, staff email addresses, password-reset tokens and the per-item final-result table. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
 
 ## 5. Verify the installation
 
@@ -71,8 +71,26 @@ Make sure the PHP web-server account can read the project files and write to the
 
 Reset links expire after 30 minutes and are single-use. If mail transport is not configured, the portal will not be able to deliver reset links.
 
-## 7. Back up and restore
+## 8. Enable automatic auction opening and closing
+
+The application also checks auction times when staff view the catalogue or when live status is refreshed. To ensure an auction closes and its results are finalised even when nobody is browsing, configure a one-minute system cron job to run the CLI scheduler.
+
+Test it manually first from the project root:
+
+```sh
+php tools/close_auctions.php
+```
+
+On the Debian server, configure the job to run as the web application account (commonly `www-data`) and adjust the project path if yours differs:
+
+```cron
+* * * * * cd /var/www/html/staff-sales-auction && /usr/bin/php tools/close_auctions.php >> storage/logs/auction-scheduler.log 2>&1
+```
+
+Confirm the account can read the project, write to the SQLite database and append to the log. Review the scheduler log after testing an auction. The scheduler is idempotent: already-open auctions are not reopened, and already-closed auctions are not finalised twice.
+
+## 9. Back up and restore
 Back up the SQLite database file when no setup/schema changes are running. For an active deployment, use SQLite's online backup API or a short maintenance window rather than copying a database during active writes. Back up uploaded item images separately. Test restoration before relying on the backup.
 
 ## Before production
-Implement and test bid processing, transaction/locking behaviour, anti-sniping, closing/finalisation, admin workflows, backup/restore and security tests. Configure HTTPS, review filesystem permissions and test restores. Do not run a real auction on v0.6.
+Run the PHP syntax workflow, then test bidding with multiple accounts, concurrent bids, anti-sniping, automatic closing, final results, CSV exports, backup/restore and security controls. Configure HTTPS, review filesystem permissions and test restores. Buyout transactions, winner emails and payment/settlement workflows are not implemented. Do not conduct a real auction until the full test plan has passed.
