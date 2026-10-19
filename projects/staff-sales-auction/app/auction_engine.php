@@ -52,6 +52,15 @@ function finalise_expired_auctions(): array {
                     'price'=>$winner ? (int)$winner['amount_cents'] : 0,
                     'email'=>$winner ? 'pending' : 'not_applicable','now'=>$now
                 ]);
+                if($winner && $insert->rowCount()===1) {
+                    $notice=$pdo->prepare("INSERT INTO notifications(user_id,notification_type,title,message,created_at) VALUES(:uid,'auction_result',:title,:message,:now)");
+                    $notice->execute([
+                        'uid'=>(int)$winner['bidder_user_id'],
+                        'title'=>'Auction result: '.$item['title'],
+                        'message'=>'You won Lot '.$item['lot_number'].' in '.$auction['title'].' for N$ '.number_format((int)$winner['amount_cents']/100,2,'.',',').'.',
+                        'now'=>$now
+                    ]);
+                }
             }
             $close=$pdo->prepare("UPDATE auctions SET status='closed',closed_at=COALESCE(closed_at,:now),updated_at=:now WHERE id=:id AND status IN ('scheduled','open')");
             $close->execute(['now'=>$now,'id'=>(int)$auction['id']]);
@@ -89,10 +98,6 @@ function finalise_expired_auctions(): array {
             $sent=send_app_email((string)$job['email'],$subject,$body);
             $pdo->prepare("UPDATE auction_results SET email_status=:status,email_sent_at=CASE WHEN :sent=1 THEN :now ELSE email_sent_at END,email_last_error=:error WHERE id=:id")
                 ->execute(['status'=>$sent?'sent':'failed','sent'=>$sent?1:0,'now'=>auction_now(),'error'=>$sent?null:'Mail transport did not confirm acceptance','id'=>(int)$job['id']]);
-            if($sent) {
-                $pdo->prepare("INSERT INTO notifications(user_id,notification_type,title,message,created_at) VALUES(:uid,'auction_result',:title,:message,:now)")
-                    ->execute(['uid'=>(int)$job['user_id'],'title'=>'Auction result: '.$job['item_title'],'message'=>'You won Lot '.$job['lot_number'].' in '.$job['auction_title'].' for N$ '.number_format((int)$job['final_price_cents']/100,2,'.',',').'.','now'=>auction_now()]);
-            }
         } catch(Throwable $e) {
             error_log('Auction winner notification failed for result '.(int)$job['id'].': '.$e->getMessage());
             $pdo->prepare("UPDATE auction_results SET email_status='failed',email_last_error='Notification attempt failed; see server log' WHERE id=:id")->execute(['id'=>(int)$job['id']]);
