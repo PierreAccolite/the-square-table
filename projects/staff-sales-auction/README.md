@@ -11,6 +11,8 @@ A new, independent internal staff auction application in the Square Table projec
 - A local SQLite database stored under `storage/database/`, outside the public web root.
 - Server-side bid validation and transactional processing before live bidding is enabled.
 - Full accepted-bid history and audit events.
+- SQLite write-locked bid acceptance, server-side price/deadline validation, and idempotent request identifiers.
+- One-time item-level results, private bidder results, administrator results and CSV result reporting.
 - Anti-sniping: a valid accepted bid with **two minutes or less remaining** resets the deadline to two minutes from acceptance.
 - Ordinary employees see prices and auction status, not other bidders' identities.
 - The project folder is an installation package. The live database and local configuration are created on the target machine and are not committed to GitHub.
@@ -49,6 +51,10 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Recorded bid counts on staff catalogue cards and the admin item list.
 - Independent bidder, procurement, custodian and approver permissions, combinable per account.
 - Self-service password reset with single-use hashed tokens, 30-minute expiry, generic responses and rate limiting; requires staff email addresses and mail transport configuration.
+- Server-validated bidding with opening-price/minimum-increment enforcement and two-minute anti-sniping extensions.
+- CLI closing/finalisation job with unique result rows, internal winner notifications, and retryable winner-email delivery.
+- Private My Results page and administrator results dashboard.
+- Auction results and final-price CSV report.
 - Procurement/custodian item-change requests with reason, before/after comparison, separate-person approval, stale-request protection and audit logging.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
@@ -58,12 +64,9 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Audit events for auction and item creation and auction scheduling.
 
 ## Not included yet
-- Bid submission and transactional bid validation.
-- Automatic auction opening/closing, live countdown or polling.
-- Anti-sniping execution.
+- Live countdown/polling and instant cross-client bid refresh.
+- Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing.
 - Item deletion is intentionally not offered; items can be withdrawn.
-- Live bid-processing and automatic close/finalisation are not implemented yet.
-- End-of-auction winner-result emails remain planned until bid processing and an auditable auction-finalisation workflow exist.
 - Buyout/purchase-now transactions remain disabled.
 - Award/finalisation workflow, winner notifications, and production security certification.
 
