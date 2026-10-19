@@ -18,7 +18,7 @@ if(!preg_match('/^(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,2})?$/',$rawAmount)){
     $_SESSION['bid_flash']='Enter a valid bid amount using up to two decimal places.';
     redirect_to('auctions.php'.($back>0?'#auction-'.$back:''));
 }
-$amountCents=(int)round((float)$rawAmount*100);
+$parts=explode('.',$rawAmount,2);$amountCents=((int)$parts[0]*100)+(isset($parts[1])?(int)str_pad($parts[1],2,'0'):0);
 $pdo=db();
 $now=auction_now();
 $error='';
@@ -30,7 +30,6 @@ try {
     elseif(!in_array($item['auction_status'],['scheduled','open'],true)) $error='This auction is not accepting bids.';
     elseif(empty($item['starts_at'])||empty($item['ends_at'])||(string)$item['starts_at']>$now) $error='Bidding has not opened yet.';
     elseif((string)$item['ends_at']<=$now) $error='Bidding has closed for this item.';
-    elseif((int)$item['buyout_enabled']===1) $error='Buyout is configured but purchase transactions are not enabled.';
     else {
         $dupe=$pdo->prepare('SELECT id FROM bids WHERE client_request_id=:request');$dupe->execute(['request'=>$requestId]);
         if($dupe->fetch()) {
