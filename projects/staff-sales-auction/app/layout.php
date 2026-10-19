@@ -9,6 +9,7 @@ function render_page_start(string $title,string $activeNav,array $user):void{
   ['key'=>'dashboard','label'=>'Dashboard','url'=>'index.php','roles'=>['employee','admin','auditor']],
   ['key'=>'catalogue','label'=>'Staff catalogue','url'=>'auctions.php','roles'=>['employee','admin','auditor']],
   ['key'=>'my-bids','label'=>'My bids','url'=>'my-bids.php','roles'=>['employee','admin']],
+  ['key'=>'results','label'=>'Auction results','url'=>'results.php','roles'=>['employee','admin','auditor']],
   ['key'=>'notifications','label'=>'Notifications','url'=>'notifications.php','roles'=>['employee','admin','auditor']],
  ];
  if($admin){
