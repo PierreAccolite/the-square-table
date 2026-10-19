@@ -9,7 +9,7 @@ A new, independent internal staff auction application in the Square Table projec
 - Internal company network only; individual portal-managed employee accounts.
 - PHP 8.1+ with PDO SQLite; no separate database service required.
 - A local SQLite database stored under `storage/database/`, outside the public web root.
-- Server-side bid validation and transactional processing before live bidding is enabled.
+- Server-side bid validation and transactional processing.
 - Full accepted-bid history and audit events.
 - SQLite write-locked bid acceptance, server-side price/deadline validation, and idempotent request identifiers.
 - One-time item-level results, private bidder results, administrator results and CSV result reporting.
@@ -34,7 +34,7 @@ php tools/check_environment.php
 
 See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 
-## Included in v0.6 development
+## Included in v0.7 development
 - SQLite schema and local setup wizard.
 - Login/logout foundation, password hashing, CSRF tokens, secure session settings and basic login throttling.
 - Employee dashboard with a staff catalogue entry point.
@@ -68,7 +68,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - Buyout/purchase-now transactions remain disabled.
-- Award/finalisation workflow, winner notifications, and production security certification.
+- Payment settlement, collection tracking, live cross-client countdown/polling and production security certification.
 
 **Important:** this remains a development/testing release. Bidding is enabled in code but has not been certified for real-money or business-critical auctions. Configure the finalisation job, verify mail transport, test backups/restore and exercise the test checklist on a disposable database before any operational use. Scheduling makes published catalogue items visible; the server opens bidding according to the configured start time.
 
