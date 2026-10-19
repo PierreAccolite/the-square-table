@@ -1,4 +1,4 @@
-# Test plan — v0.6 development
+# Test plan — v0.7 development
 
 Run on a disposable local SQLite database before internal deployment. Do not conduct a real auction with this release.
 
@@ -53,7 +53,7 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 ## Bidding and auction finalisation (v0.7 — test on a disposable database)
 - [ ] Bid form is shown only to a signed-in bidder while the auction time window is active.
 - [ ] Server rejects bids before the start time and at/after the closing deadline.
-- [ ] First accepted bid must meet the opening price; later bids must meet current high bid plus minimum increment.
+- [ ] First accepted bid must be positive and meet the opening price; later bids must meet current high bid plus minimum increment.
 - [ ] Malformed amounts, negative values, excessive precision and invalid request IDs are rejected.
 - [ ] Replaying the same client request ID cannot create a second bid.
 - [ ] Concurrent bids are serialized and cannot both pass using the same stale high bid.
