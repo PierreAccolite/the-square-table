@@ -24,7 +24,7 @@ if($auctions){
 <div class="date-strip"><span><strong>Opens</strong><?= e($auction['starts_at']??'Not set') ?></span><span><strong>Closes</strong><?= e($auction['ends_at']??'Not set') ?></span></div>
 <?php $items=$itemsByAuction[(int)$auction['id']]??[]; if(!$items): ?><div class="empty-state"><p>No published items in this auction yet.</p></div><?php else: ?><div class="catalogue-grid"><?php foreach($items as $item):
  $high=$item['high_amount']===null?null:(int)$item['high_amount'];
- $minimum=$high===null?(int)$item['opening_price_cents']:$high+(int)$item['minimum_increment_cents'];
+ $minimum=$high===null?max(1,(int)$item['opening_price_cents']):$high+(int)$item['minimum_increment_cents'];
  $canBid=has_permission($user,'bidder')&&$isOpen;
  ?><article class="catalogue-card"><div class="catalogue-lot">LOT <?= e($item['lot_number']) ?></div>
 <?php if($item['image_path']): ?><img class="catalogue-image" src="<?= e(app_url('item-image.php?id='.(int)$item['id'])) ?>" alt="<?= e($item['title']) ?>" loading="lazy"><?php else: ?><div class="catalogue-image-placeholder">No image yet</div><?php endif; ?>
