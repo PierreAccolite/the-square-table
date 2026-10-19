@@ -80,4 +80,4 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] Draft or scheduled auctions can be edited; closed/open/cancelled auctions are locked.
 
 ## Not implemented and therefore not testable yet
-Live countdown/polling across browser sessions, buyout transactions, payment settlement, collection tracking and production security certification remain outside this milestone.
+Live countdown timer, buyout transactions, payment settlement, collection tracking and production security certification remain outside this milestone. The catalogue bid values poll every 10 seconds.
