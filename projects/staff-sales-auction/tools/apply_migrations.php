@@ -54,5 +54,5 @@ $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_auction ON auction_re
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_winner ON auction_results(winner_user_id,finalized_at)');
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_email ON auction_results(email_status,finalized_at)');
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'005_auction_results']);
-echo "Migrations 002, 003, 004 and 005 applied or already present. Existing data preserved.\\n";
-echo "Permissions, approvals, password reset, bidding and auction result storage are available. Configure a scheduled CLI run for automatic finalisation.\\n";
+echo "Migrations 002, 003, 004 and 005 applied or already present. Existing data preserved.\n";
+echo "Permissions, approvals, password reset, bidding and auction result storage are available. Configure a scheduled CLI run for automatic finalisation.\n";
