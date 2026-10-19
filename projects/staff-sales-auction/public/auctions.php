@@ -34,13 +34,16 @@ $canBid=has_permission($user,'bidder');
   });
  }
  async function refresh(){
-  const cards=document.querySelectorAll('[data-auction-item]');
-  for(const card of cards){
-   const id=card.dataset.auctionItem;
-   try{
-    const response=await fetch('<?= e(app_url('auction-status.php')) ?>?id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
-    if(!response.ok)continue;
-    const data=await response.json();
+  const cards=Array.from(document.querySelectorAll('[data-auction-item]'));
+  if(!cards.length)return;
+  const ids=cards.map(card=>card.dataset.auctionItem);
+  try{
+   const response=await fetch('<?= e(app_url('auction-status.php')) ?>?ids='+encodeURIComponent(ids.join(',')),{credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
+   if(!response.ok)return;
+   const payload=await response.json();
+   cards.forEach(card=>{
+    const id=card.dataset.auctionItem, data=payload.items&&payload.items[id];
+    if(!data)return;
     const price=card.querySelector('[data-current-price="'+id+'"]');
     const count=card.querySelector('[data-bid-count="'+id+'"]');
     const min=card.querySelector('[data-minimum-bid="'+id+'"]');
@@ -58,8 +61,8 @@ $canBid=has_permission($user,'bidder');
      button.textContent=data.can_bid?'Place bid':'Bidding closed';
      if(help)help.textContent=data.can_bid?'Your bid is recorded only after server-side validation.':'This item is not currently accepting bids.';
     }
-   }catch(e){}
-  }
+   });
+  }catch(e){}
   updateCountdowns();
  }
  refresh();
