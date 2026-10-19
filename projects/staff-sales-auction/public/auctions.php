@@ -50,6 +50,9 @@ if($auctions){
     const minimum=document.querySelector('.minimum-next[data-item-id="'+item.id+'"]');
     const count=document.querySelector('.bid-count[data-item-id="'+item.id+'"]');
     const auctionStatus=document.querySelector('.auction-status[data-auction-id="'+item.auction_id+'"]');
+    const input=document.querySelector('input[name="amount"][data-item-id="'+item.id+'"]');
+    const form=input?input.closest('form'):null;
+    const submit=form?form.querySelector('button[type="submit"]'):null;
     if(high)high.textContent=item.high_cents===null?'No bids yet':'N$ '+money(item.high_cents);
     if(minimum)minimum.textContent='N$ '+money(item.minimum_cents);
     if(count)count.textContent=String(item.bid_count);
