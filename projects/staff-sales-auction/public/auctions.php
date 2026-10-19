@@ -56,7 +56,7 @@ if($auctions){
     if(high)high.textContent=item.high_cents===null?'No bids yet':'N$ '+money(item.high_cents);
     if(minimum)minimum.textContent='N$ '+money(item.minimum_cents);
     if(count)count.textContent=String(item.bid_count);
-    if(auctionStatus)auctionStatus.textContent=item.auction_can_bid?'Bidding open':item.auction_status.charAt(0).toUpperCase()+item.auction_status.slice(1);
+    if(auctionStatus)auctionStatus.textContent=item.auction_display_status;
     if(input){input.min=(item.minimum_cents/100).toFixed(2);input.placeholder=(item.minimum_cents/100).toFixed(2);if(!item.auction_can_bid)input.disabled=true;}
     if(submit&&!item.auction_can_bid){submit.disabled=true;submit.textContent='Bidding closed';}
    }
