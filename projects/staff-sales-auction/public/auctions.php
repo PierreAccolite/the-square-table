@@ -19,7 +19,7 @@ if($auctions){
 <section class="welcome"><div><p class="eyebrow">STAFF SALES · CATALOGUE</p><h1>Browse staff sale items</h1><p class="muted">Bids are validated and recorded by the server. A valid bid in the final two minutes extends the closing time by two minutes.</p></div><div class="welcome-icon">▤</div></section>
 <?php if($flash!==''): ?><div class="<?= str_starts_with($flash,'Bid accepted:')?'notice':'alert' ?>" role="status"><?= e($flash) ?></div><?php endif; ?>
 <?php if(!$auctions): ?><section class="content-panel empty-state"><strong>No staff sales are published yet</strong><p>When an administrator schedules an auction, its published items will appear here.</p></section><?php else: foreach($auctions as $auction): ?>
-<section class="content-panel" id="auction-<?= (int)$auction['id'] ?>"><div class="section-heading"><div><p class="eyebrow">STAFF SALE</p><h2><?= e($auction['title']) ?></h2></div><?php $isOpen=!empty($auction['starts_at'])&&!empty($auction['ends_at'])&&(string)$auction['starts_at']<=$now&&(string)$auction['ends_at']>$now&&in_array($auction['status'],['scheduled','open'],true); ?><span class="status-pill"><?= $isOpen?'Bidding open':e(ucfirst($auction['status'])) ?></span></div>
+<section class="content-panel" id="auction-<?= (int)$auction['id'] ?>"><div class="section-heading"><div><p class="eyebrow">STAFF SALE</p><h2><?= e($auction['title']) ?></h2></div><?php $isOpen=!empty($auction['starts_at'])&&!empty($auction['ends_at'])&&(string)$auction['starts_at']<=$now&&(string)$auction['ends_at']>$now&&in_array($auction['status'],['scheduled','open'],true); ?><span class="status-pill auction-status" data-auction-id="<?= (int)$auction['id'] ?>"><?= $isOpen?'Bidding open':e(ucfirst($auction['status'])) ?></span></div>
 <?php if($auction['description']): ?><p class="muted"><?= nl2br(e($auction['description'])) ?></p><?php endif; ?>
 <div class="date-strip"><span><strong>Opens</strong><?= e($auction['starts_at']??'Not set') ?></span><span><strong>Closes</strong><?= e($auction['ends_at']??'Not set') ?></span></div>
 <?php $items=$itemsByAuction[(int)$auction['id']]??[]; if(!$items): ?><div class="empty-state"><p>No published items in this auction yet.</p></div><?php else: ?><div class="catalogue-grid"><?php foreach($items as $item):
@@ -49,11 +49,13 @@ if($auctions){
     const high=document.querySelector('.current-high[data-item-id="'+item.id+'"]');
     const minimum=document.querySelector('.minimum-next[data-item-id="'+item.id+'"]');
     const count=document.querySelector('.bid-count[data-item-id="'+item.id+'"]');
-    const input=document.querySelector('input[name="amount"][data-item-id="'+item.id+'"]');
+    const auctionStatus=document.querySelector('.auction-status[data-auction-id="'+item.auction_id+'"]');
     if(high)high.textContent=item.high_cents===null?'No bids yet':'N$ '+money(item.high_cents);
     if(minimum)minimum.textContent='N$ '+money(item.minimum_cents);
     if(count)count.textContent=String(item.bid_count);
-    if(input){input.min=(item.minimum_cents/100).toFixed(2);input.placeholder=(item.minimum_cents/100).toFixed(2);}
+    if(auctionStatus)auctionStatus.textContent=item.auction_can_bid?'Bidding open':item.auction_status.charAt(0).toUpperCase()+item.auction_status.slice(1);
+    if(input){input.min=(item.minimum_cents/100).toFixed(2);input.placeholder=(item.minimum_cents/100).toFixed(2);if(!item.auction_can_bid)input.disabled=true;}
+    if(submit&&!item.auction_can_bid){submit.disabled=true;submit.textContent='Bidding closed';}
    }
   }catch(_error){/* Keep the last displayed values if polling is temporarily unavailable. */}
  }
