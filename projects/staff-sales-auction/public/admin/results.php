@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__,2).'/app/bootstrap.php';
+require dirname(__DIR__,2).'/app/auction_engine.php';
 $user=require_role('admin');
 $rows=db()->query(
  "SELECT r.id,r.result_status,r.final_price_cents,r.finalized_at,r.email_status,r.email_sent_at,r.email_last_error,
@@ -11,7 +12,7 @@ $rows=db()->query(
   LEFT JOIN users u ON u.id=r.winner_user_id
   ORDER BY r.finalized_at DESC,a.title,i.lot_number"
 )->fetchAll();
-$pending=(int)db()->query("SELECT COUNT(*) FROM auctions WHERE status IN ('scheduled','open') AND ends_at IS NOT NULL AND ends_at<=strftime('%Y-%m-%d %H:%M:%S','now')")->fetchColumn();
+$q=db()->prepare("SELECT COUNT(*) FROM auctions WHERE status IN ('scheduled','open') AND ends_at IS NOT NULL AND ends_at<=:now");$q->execute(['now'=>auction_now()]);$pending=(int)$q->fetchColumn();
 require dirname(__DIR__,2).'/app/layout.php';render_page_start('Auction results','results',$user);
 ?>
 <section class="welcome"><div><p class="eyebrow">AUCTION CLOSE & AWARDS</p><h1>Auction results</h1><p class="muted">Finalised item outcomes, winner notification status and closing checks.</p></div><div class="welcome-icon">🏆</div></section>
