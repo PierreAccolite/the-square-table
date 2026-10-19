@@ -64,11 +64,11 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Audit events for auction and item creation and auction scheduling.
 
 ## Not included yet
-- Live countdown timer; the catalogue refreshes current bids and minimums every 10 seconds.
+- The catalogue refreshes current bids and minimums every 10 seconds; a live countdown timer is not included.
 - Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - Buyout/purchase-now transactions remain disabled.
-- Payment settlement, collection tracking, live cross-client countdown/polling and production security certification.
+- Payment settlement, collection tracking, live countdown timer and production security certification.
 
 **Important:** this remains a development/testing release. Bidding is enabled in code but has not been certified for real-money or business-critical auctions. Configure the finalisation job, verify mail transport, test backups/restore and exercise the test checklist on a disposable database before any operational use. Scheduling makes published catalogue items visible; the server opens bidding according to the configured start time.
 
