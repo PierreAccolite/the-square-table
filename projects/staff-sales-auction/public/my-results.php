@@ -6,7 +6,7 @@ $q=db()->prepare(
  "SELECT i.id AS item_id,i.lot_number,i.title AS item_title,a.title AS auction_title,a.status AS auction_status,
          r.result_status,r.final_price_cents,r.finalized_at,
          MAX(own.amount_cents) AS my_high_bid,
-         CASE WHEN r.winner_user_id=:uid THEN 1 ELSE 0 END AS is_winner
+         CASE WHEN r.winner_user_id=:uid_winner THEN 1 ELSE 0 END AS is_winner
   FROM bids own
   JOIN auction_items i ON i.id=own.auction_item_id
   JOIN auctions a ON a.id=i.auction_id
@@ -15,7 +15,7 @@ $q=db()->prepare(
   GROUP BY i.id,r.id
   ORDER BY COALESCE(r.finalized_at,'9999-12-31 23:59:59') DESC,a.title,i.lot_number"
 );
-$q->execute(['uid'=>(int)$user['id']]);$results=$q->fetchAll();
+$q->execute(['uid_filter'=>(int)$user['id'],'uid_winner'=>(int)$user['id']]);$results=$q->fetchAll();
 require dirname(__DIR__).'/app/layout.php';render_page_start('My results','my-results',$user);
 ?>
 <section class="welcome"><div><p class="eyebrow">YOUR AUCTION OUTCOMES</p><h1>My results</h1><p class="muted">Only your own bidding activity and results are shown here.</p></div><div class="welcome-icon">🏆</div></section>
