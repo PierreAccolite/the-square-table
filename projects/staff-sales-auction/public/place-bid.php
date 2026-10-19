@@ -22,7 +22,7 @@ if (preg_match('/^\d{1,9}(?:\.\d{1,2})?$/', $rawAmount)) {
     $amountCents = ((int)$parts[0] * 100) + (int)str_pad($parts[1] ?? '', 2, '0');
 }
 if (!$itemId || $amountCents === null || $amountCents < 1) {
-    redirect_to('auctions.php?bid_error='.rawurlencode('Enter a valid bid amount.').'#item-'.max(0,(int)$itemId);
+    redirect_to('auctions.php?bid_error='.rawurlencode('Enter a valid bid amount.').'#item-'.max(0,(int)$itemId));
 }
 try {
     auction_close_expired(db());
