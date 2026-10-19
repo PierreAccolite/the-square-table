@@ -130,8 +130,8 @@ function auction_place_bid(PDO $pdo, int $itemId, int $userId, int $amountCents,
             throw new DomainException('Your bid is too low. The minimum acceptable bid is N$ '.number_format($minimum/100,2,'.',',').'.');
         }
 
-        $insert = $pdo->prepare('INSERT INTO bids(auction_item_id,bidder_user_id,amount_cents,client_request_id,placed_at) VALUES(:item,:user,:amount,:request,:now)');
-        $insert->execute(['item'=>$itemId,'user'=>$userId,'amount'=>$amountCents,'request'=>$requestId,'now'=>date('Y-m-d H:i:s.u')]);
+        $insert = $pdo->prepare('INSERT INTO bids(auction_item_id,bidder_user_id,amount_cents,client_request_id) VALUES(:item,:user,:amount,:request)');
+        $insert->execute(['item'=>$itemId,'user'=>$userId,'amount'=>$amountCents,'request'=>$requestId]);
         $bidId = (int)$pdo->lastInsertId();
 
         $endsAt = (string)$item['ends_at'];
