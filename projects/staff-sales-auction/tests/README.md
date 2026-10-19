@@ -51,7 +51,7 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] Employee can view only their own bid history and notifications.
 
 ## Bidding and auction finalisation (v0.7 — test on a disposable database)
-- [ ] Bid form is shown only to a signed-in bidder while the auction time window is active.
+- [ ] Only signed-in bidders can submit bids; a scheduled auction's bid form stays disabled until opening and is disabled at closing.
 - [ ] Server rejects bids before the start time and at/after the closing deadline.
 - [ ] First accepted bid must be positive and meet the opening price; later bids must meet current high bid plus minimum increment.
 - [ ] Malformed amounts, negative values, excessive precision and invalid request IDs are rejected.
