@@ -36,7 +36,7 @@ try {
             $error='This bid request was already processed. Refresh the catalogue to see the current price.';
         } else {
             $high=$pdo->prepare('SELECT MAX(amount_cents) FROM bids WHERE auction_item_id=:item');$high->execute(['item'=>(int)$itemId]);$highAmount=$high->fetchColumn();
-            $minimum=$highAmount===null?(int)$item['opening_price_cents']:(int)$highAmount+(int)$item['minimum_increment_cents'];
+            $minimum=$highAmount===null?max(1,(int)$item['opening_price_cents']):(int)$highAmount+(int)$item['minimum_increment_cents'];
             if($amountCents<$minimum) {
                 $error='Your bid is below the current minimum of N$ '.number_format($minimum/100,2,'.',',').'. Refresh the catalogue and try again.';
             } else {
@@ -59,7 +59,7 @@ try {
             }
         }
     }
-    $pdo->rollBack();
+    try{$pdo->exec('ROLLBACK');}catch(Throwable $ignored){}
 } catch(Throwable $e) {
     try{$pdo->exec('ROLLBACK');}catch(Throwable $ignored){}
     error_log('Staff Sales bid submission failed: '.$e->getMessage());
