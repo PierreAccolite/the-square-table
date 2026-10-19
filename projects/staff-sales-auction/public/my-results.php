@@ -11,7 +11,7 @@ $q=db()->prepare(
   JOIN auction_items i ON i.id=own.auction_item_id
   JOIN auctions a ON a.id=i.auction_id
   LEFT JOIN auction_results r ON r.auction_item_id=i.id
-  WHERE own.bidder_user_id=:uid
+  WHERE own.bidder_user_id=:uid_filter
   GROUP BY i.id,r.id
   ORDER BY COALESCE(r.finalized_at,'9999-12-31 23:59:59') DESC,a.title,i.lot_number"
 );
