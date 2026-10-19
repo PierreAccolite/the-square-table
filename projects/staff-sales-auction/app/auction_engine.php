@@ -70,9 +70,9 @@ function finalise_expired_auctions(): array {
                 $event->execute(['actor'=>$actor,'id'=>(string)$auction['id'],'details'=>json_encode(['title'=>$auction['title'],'finalized_at'=>$now],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'now'=>$now]);
             }
         }
-        $pdo->commit();
+        $pdo->exec('COMMIT');
     } catch(Throwable $e) {
-        if($pdo->inTransaction())$pdo->rollBack();
+        try{$pdo->exec('ROLLBACK');}catch(Throwable $ignored){}
         throw $e;
     }
 
