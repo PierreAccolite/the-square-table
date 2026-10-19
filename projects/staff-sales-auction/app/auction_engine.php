@@ -61,8 +61,8 @@ function finalise_expired_auctions(): void {
                     ]);
                 }
             }
-            $close=$pdo->prepare("UPDATE auctions SET status='closed',closed_at=COALESCE(closed_at,:now),updated_at=:now WHERE id=:id AND status IN ('scheduled','open')");
-            $close->execute(['now'=>$now,'id'=>(int)$auction['id']]);
+            $close=$pdo->prepare("UPDATE auctions SET status='closed',closed_at=COALESCE(closed_at,:closed_now),updated_at=:updated_now WHERE id=:id AND status IN ('scheduled','open')");
+            $close->execute(['closed_now'=>$now,'updated_now'=>$now,'id'=>(int)$auction['id']]);
             if($close->rowCount()>0) {
                 $actor=(int)(current_user()['id']??0) ?: null;
                 $event=$pdo->prepare("INSERT INTO audit_events(actor_user_id,event_type,entity_type,entity_id,details_json,created_at) VALUES(:actor,'auction.finalised','auction',:id,:details,:now)");
