@@ -1,7 +1,7 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.6.0 — procurement approvals and self-service password reset  
-**Status:** Internal development/testing only; live bidding is not enabled.
+**Version:** 0.7.0 — transactional bidding and auction results  
+**Status:** Internal development/testing only; bidding and result finalisation are implemented for controlled testing, not real auctions.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
 
@@ -67,7 +67,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Buyout/purchase-now transactions remain disabled.
 - Award/finalisation workflow, winner notifications, and production security certification.
 
-**Important:** scheduling currently makes the catalogue visible; it does not open bidding. Do not use this release to conduct a real auction.
+**Important:** this remains a development/testing release. Bidding is enabled in code but has not been certified for real-money or business-critical auctions. Configure the finalisation job, verify mail transport, test backups/restore and exercise the test checklist on a disposable database before any operational use. Scheduling makes published catalogue items visible; the server opens bidding according to the configured start time.
 
 ## Layout
 - `public/` — web-accessible entry points and assets only.
