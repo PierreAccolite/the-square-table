@@ -1,6 +1,6 @@
-# Installation — Development release v0.6
+# Installation — Development release v0.7
 
-This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release is for controlled development/testing only and is not yet a live auction system.
+This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release includes bidding and result finalisation for controlled development/testing only. Do not use it for a real auction.
 
 ## Requirements
 - Python 3.8+ (standard library only; no pip packages required).
@@ -37,13 +37,13 @@ If the wizard fails after the database has been created, fix the reported issue 
 
 ## 4. Apply the latest additive schema update (all installations)
 
-After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout fields, permission assignments, approval queue, email addresses and password-reset tokens. This step is required for both new and existing installations:
+After the initial setup and after copying the latest files, run this from the project root to add the item-level buyout fields, permission assignments, approval queue, email addresses, password-reset tokens and auction-result storage. This step is required for both new and existing installations:
 
 ```sh
 php tools/apply_migrations.php
 ```
 
-The update is safe to rerun and preserves existing records. It adds the buyout fields, independent permission assignments, item-change approval queue, staff email addresses and password-reset tokens. Buyout transactions are not enabled yet. Do not rerun the initial setup script just to apply this update.
+The update is safe to rerun and preserves existing records. It applies migrations 002–005, including the buyout settings, independent permission assignments, item-change approval queue, staff email addresses, password-reset tokens and one-time auction results. Existing users and auction data are preserved. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
 
 ## 5. Verify the installation
 
@@ -62,7 +62,7 @@ The sample configuration enables secure session cookies by default. For isolated
 
 Make sure the PHP web-server account can read the project files and write to the SQLite database directory. The database must remain outside the web root.
 
-### Email delivery for password resets
+### Email delivery for password resets and auction results
 
 1. In `config/local.php`, set `mail_from` to a real sender address accepted by your server, for example `'mail_from' => 'staff-sales@your-company-domain'`.
 2. Ensure PHP's `mail()` can hand messages to a configured local mail transport (such as the server's existing Postfix setup). This application does not connect directly to an SMTP server or store SMTP credentials.
@@ -74,5 +74,38 @@ Reset links expire after 30 minutes and are single-use. If mail transport is not
 ## 7. Back up and restore
 Back up the SQLite database file when no setup/schema changes are running. For an active deployment, use SQLite's online backup API or a short maintenance window rather than copying a database during active writes. Back up uploaded item images separately. Test restoration before relying on the backup.
 
-## Before production
-Implement and test bid processing, transaction/locking behaviour, anti-sniping, closing/finalisation, admin workflows, backup/restore and security tests. Configure HTTPS, review filesystem permissions and test restores. Do not run a real auction on v0.6.
+## 8. Configure automatic auction closing
+
+The server rejects bids at or after the stored closing time, but the database status and results are finalised by a CLI job. Configure it to run every minute as the same operating-system account that can write to the application database.
+
+On the Debian host, first ensure the log directory exists and is writable by the web application account:
+
+```sh
+mkdir -p storage/logs
+chown www-data:www-data storage/logs
+```
+
+Then edit the www-data user's crontab:
+
+```sh
+crontab -u www-data -e
+```
+
+Add this line, adjusting the project path if needed:
+
+```cron
+* * * * * cd /var/www/html/staff-sales-auction && /usr/bin/php tools/finalize_auctions.php >> storage/logs/finalize.log 2>&1
+```
+
+Run a one-time manual check first:
+
+```sh
+cd /var/www/html/staff-sales-auction
+sudo -u www-data /usr/bin/php tools/finalize_auctions.php
+```
+
+The command closes expired scheduled/open auctions, stores one result per published item, creates an internal winner notification, and attempts winner email delivery. Email failures are recorded for retry. Review storage/logs/finalize.log and the administrator Results page. Ensure the configured mail_from and PHP mail() transport work before expecting email.
+
+## Before operational use
+
+The v0.7 bidding and closing code has passed PHP syntax checks, but syntax checks are not a runtime or concurrency test. Use a disposable database to verify bid races, minimum bids, deadline boundaries, two-minute anti-sniping, repeat finalisation, result privacy, email retries, and backup/restore. Configure HTTPS and review filesystem permissions. Do not use this development release for a real or business-critical auction.
