@@ -14,16 +14,18 @@ $rows=db()->query(
   ORDER BY i.id"
 )->fetchAll();
 $items=[];
+$serverNow=(new DateTimeImmutable('now'))->format('Y-m-d H:i:s');
 foreach($rows as $row){
  $high=$row['high_amount']===null?null:(int)$row['high_amount'];
  $items[]=[
   'id'=>(int)$row['id'],
   'auction_id'=>(int)$row['auction_id'],
   'auction_status'=>(string)$row['auction_status'],
-  'auction_can_bid'=>in_array($row['auction_status'],['scheduled','open'],true)&&!empty($row['starts_at'])&&!empty($row['ends_at'])&&(string)$row['starts_at']<=(new DateTimeImmutable('now'))->format('Y-m-d H:i:s')&&(string)$row['ends_at']>(new DateTimeImmutable('now'))->format('Y-m-d H:i:s'),
+  'auction_can_bid'=>in_array($row['auction_status'],['scheduled','open'],true)&&!empty($row['starts_at'])&&!empty($row['ends_at'])&&(string)$row['starts_at']<=$serverNow&&(string)$row['ends_at']>$serverNow,
+  'auction_display_status'=>$row['auction_status']==='closed'?'Closed':($row['auction_status']==='cancelled'?'Cancelled':((!empty($row['starts_at'])&&(string)$row['starts_at']>$serverNow)?'Scheduled':((!empty($row['ends_at'])&&(string)$row['ends_at']<=$serverNow)?'Bidding closed':'Bidding open'))),
   'high_cents'=>$high,
   'minimum_cents'=>$high===null?max(1,(int)$row['opening_price_cents']):$high+(int)$row['minimum_increment_cents'],
   'bid_count'=>(int)$row['bid_count']
  ];
 }
-echo json_encode(['items'=>$items,'server_time'=>(new DateTimeImmutable('now'))->format('Y-m-d H:i:s')],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+echo json_encode(['items'=>$items,'server_time'=>$serverNow],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
