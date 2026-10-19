@@ -32,5 +32,30 @@ $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(em
 $pdo->exec("CREATE TABLE IF NOT EXISTS password_reset_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,used_at TEXT,created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_password_reset_user_expiry ON password_reset_tokens(user_id,expires_at,used_at)');
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'004_password_reset']);
-echo "Migrations 002, 003 and 004 applied or already present. Existing data preserved.\n";
-echo "Permissions, approvals, email addresses and password reset tokens are available; live bidding remains disabled.\n";
+// Migration 005: immutable per-item auction outcomes, written by the closing engine.
+$pdo->beginTransaction();
+try {
+ $pdo->exec("CREATE TABLE IF NOT EXISTS auction_item_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  auction_id INTEGER NOT NULL,
+  auction_item_id INTEGER NOT NULL UNIQUE,
+  result_status TEXT NOT NULL CHECK(result_status IN ('sold','unsold')),
+  winning_bid_id INTEGER UNIQUE,
+  winner_user_id INTEGER,
+  final_price_cents INTEGER CHECK(final_price_cents IS NULL OR final_price_cents >= 0),
+  finalised_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),
+  FOREIGN KEY(auction_id) REFERENCES auctions(id) ON DELETE RESTRICT,
+  FOREIGN KEY(auction_item_id) REFERENCES auction_items(id) ON DELETE RESTRICT,
+  FOREIGN KEY(winning_bid_id) REFERENCES bids(id) ON DELETE RESTRICT,
+  FOREIGN KEY(winner_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+  CHECK((result_status='sold' AND winning_bid_id IS NOT NULL AND winner_user_id IS NOT NULL AND final_price_cents IS NOT NULL) OR (result_status='unsold' AND winning_bid_id IS NULL AND winner_user_id IS NULL AND final_price_cents IS NULL))
+ )");
+ $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_auction ON auction_item_results(auction_id,result_status)');
+ $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'005_auction_results']);
+ $pdo->commit();
+} catch (Throwable $e) {
+ if ($pdo->inTransaction()) $pdo->rollBack();
+ throw $e;
+}
+echo "Migrations 002, 003, 004 and 005 applied or already present. Existing data preserved.\n";
+echo "Permissions, approvals, email addresses, password reset tokens and auction result storage are available.\n";
