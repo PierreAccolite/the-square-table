@@ -44,15 +44,18 @@ try {
                 $insert->execute(['item'=>(int)$itemId,'user'=>(int)$user['id'],'amount'=>$amountCents,'request'=>$requestId,'now'=>(new DateTimeImmutable('now'))->format('Y-m-d H:i:s.u')]);
                 $deadline=new DateTimeImmutable((string)$item['ends_at']);
                 $nowDt=new DateTimeImmutable($now);
+                $deadlineExtended=false;
+                $newEnd=(string)$item['ends_at'];
                 $remaining=$deadline->getTimestamp()-$nowDt->getTimestamp();
                 if($remaining <= (int)$item['anti_sniping_window_seconds']) {
                     $newEnd=$nowDt->modify('+'.(int)$item['anti_sniping_extension_seconds'].' seconds')->format('Y-m-d H:i:s');
+                    $deadlineExtended=true;
                     $pdo->prepare("UPDATE auctions SET ends_at=:end,status='open',updated_at=:now WHERE id=:id AND status IN ('scheduled','open')")->execute(['end'=>$newEnd,'now'=>$now,'id'=>(int)$item['auction_id']]);
                 } else {
                     $pdo->prepare("UPDATE auctions SET status='open',updated_at=:now WHERE id=:id AND status='scheduled'")->execute(['now'=>$now,'id'=>(int)$item['auction_id']]);
                 }
                 $pdo->prepare("INSERT INTO audit_events(actor_user_id,event_type,entity_type,entity_id,details_json,created_at) VALUES(:actor,'bid.accepted','bid',:id,:details,:now)")
-                    ->execute(['actor'=>(int)$user['id'],'id'=>(string)$pdo->lastInsertId(),'details'=>json_encode(['auction_item_id'=>(int)$itemId,'amount_cents'=>$amountCents,'auction_id'=>(int)$item['auction_id']],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'now'=>$now]);
+                    ->execute(['actor'=>(int)$user['id'],'id'=>(string)$pdo->lastInsertId(),'details'=>json_encode(['auction_item_id'=>(int)$itemId,'amount_cents'=>$amountCents,'auction_id'=>(int)$item['auction_id'],'deadline_extended'=>$deadlineExtended,'ends_at'=>$newEnd],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'now'=>$now]);
                 $pdo->exec('COMMIT');
                 $_SESSION['bid_flash']='Bid accepted: N$ '.number_format($amountCents/100,2,'.',',').'.';
                 redirect_to('auctions.php#auction-'.(int)$item['auction_id']);
