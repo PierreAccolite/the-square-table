@@ -10,17 +10,17 @@ function render_page_start(string $title,string $activeNav,array $user):void{
  <nav class="primary-nav" aria-label="Main navigation">
  <a class="nav-link<?= $activeNav==='dashboard'?' is-active':'' ?>" href="<?= e(app_url('index.php')) ?>"<?= $activeNav==='dashboard'?' aria-current="page"':'' ?>>Dashboard</a>
  <a class="nav-link<?= $activeNav==='catalogue'?' is-active':'' ?>" href="<?= e(app_url('auctions.php')) ?>"<?= $activeNav==='catalogue'?' aria-current="page"':'' ?>>Staff catalogue</a>
- <details class="nav-group"<?= in_array($activeNav,['my-bids','my-results','notifications'],true)?' open':'' ?>><summary class="nav-link">My activity</summary><div class="nav-group-menu">
+ <details class="nav-group"><summary class="nav-link">My activity</summary><div class="nav-group-menu">
  <a class="nav-link<?= $activeNav==='my-bids'?' is-active':'' ?>" href="<?= e(app_url('my-bids.php')) ?>">My bids</a>
  <a class="nav-link<?= $activeNav==='my-results'?' is-active':'' ?>" href="<?= e(app_url('my-results.php')) ?>">My results</a>
  <a class="nav-link<?= $activeNav==='notifications'?' is-active':'' ?>" href="<?= e(app_url('notifications.php')) ?>">Notifications</a>
  </div></details>
- <?php if($admin||$auditor): ?><details class="nav-group"<?= in_array($activeNav,['results','reports','audit'],true)?' open':'' ?>><summary class="nav-link">Reports & results</summary><div class="nav-group-menu">
+ <?php if($admin||$auditor): ?><details class="nav-group"><summary class="nav-link">Reports & results</summary><div class="nav-group-menu">
  <?php if($admin): ?><a class="nav-link<?= $activeNav==='results'?' is-active':'' ?>" href="<?= e(app_url('admin/results.php')) ?>">Final results</a><?php endif; ?>
  <a class="nav-link<?= $activeNav==='reports'?' is-active':'' ?>" href="<?= e(app_url('admin/reports.php')) ?>">Reports</a>
  <a class="nav-link<?= $activeNav==='audit'?' is-active':'' ?>" href="<?= e(app_url('admin/audit.php')) ?>">Audit log</a>
  </div></details><?php endif; ?>
- <?php if($admin||$canProcure||$canApprove): ?><details class="nav-group"<?= in_array($activeNav,['admin','auctions','items','users','bulk-users','categories','procurement','approvals','settings'],true)?' open':'' ?>><summary class="nav-link">Admin settings</summary><div class="nav-group-menu">
+ <?php if($admin||$canProcure||$canApprove): ?><details class="nav-group"><summary class="nav-link">Admin settings</summary><div class="nav-group-menu">
  <?php if($admin): ?>
  <a class="nav-link<?= $activeNav==='admin'?' is-active':'' ?>" href="<?= e(app_url('admin/index.php')) ?>">Overview</a>
  <a class="nav-link<?= $activeNav==='auctions'?' is-active':'' ?>" href="<?= e(app_url('admin/auctions.php')) ?>">Auctions</a>
