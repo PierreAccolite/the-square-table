@@ -54,5 +54,12 @@ $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_auction ON auction_re
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_winner ON auction_results(winner_user_id,finalized_at)');
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_email ON auction_results(email_status,finalized_at)');
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'005_auction_results']);
-echo "Migrations 002, 003, 004 and 005 applied or already present. Existing data preserved.\n";
-echo "Permissions, approvals, password reset, bidding and auction result storage are available. Configure a scheduled CLI run for automatic finalisation.\n";
+// Migration 006: categorise lots without changing existing auction data.
+$itemColumns=$pdo->query('PRAGMA table_info(auction_items)')->fetchAll();
+$itemColumnNames=array_column($itemColumns,'name');
+if(!in_array('category',$itemColumnNames,true))$pdo->exec("ALTER TABLE auction_items ADD COLUMN category TEXT NOT NULL DEFAULT 'Uncategorised'");
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_items_category ON auction_items(category,auction_id,status)');
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'006_item_categories']);
+echo "Migrations 002–006 applied or already present. Existing data preserved.\n";
+echo "Permissions, approvals, password reset, item categories, bidding and auction result storage are available.\n";
+echo "Configure and test the scheduled CLI finalisation job before operational use.\n";
