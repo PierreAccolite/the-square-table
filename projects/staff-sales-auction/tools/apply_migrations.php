@@ -59,7 +59,11 @@ $itemColumns=$pdo->query('PRAGMA table_info(auction_items)')->fetchAll();
 $itemColumnNames=array_column($itemColumns,'name');
 if(!in_array('category',$itemColumnNames,true))$pdo->exec("ALTER TABLE auction_items ADD COLUMN category TEXT NOT NULL DEFAULT 'Uncategorised'");
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_items_category ON auction_items(category,auction_id,status)');
+$pdo->exec("CREATE TABLE IF NOT EXISTS item_categories (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(length(name) BETWEEN 1 AND 80),is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')))");
+foreach(['IT','Furniture','Spares','Tools','Office equipment','Vehicles','Other','Uncategorised'] as $categoryName){$seed=$pdo->prepare('INSERT OR IGNORE INTO item_categories(name) VALUES(:name)');$seed->execute(['name'=>$categoryName]);}
+$pdo->exec("CREATE TABLE IF NOT EXISTS app_settings (setting_key TEXT PRIMARY KEY,setting_value TEXT NOT NULL,updated_by INTEGER,updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL)");
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'006_item_categories']);
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'007_mail_settings']);
 echo "Migrations 002–006 applied or already present. Existing data preserved.\n";
 echo "Permissions, approvals, password reset, item categories, bidding and auction result storage are available.\n";
 echo "Configure and test the scheduled CLI finalisation job before operational use.\n";
