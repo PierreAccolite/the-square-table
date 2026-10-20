@@ -1,6 +1,6 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.7.0 — transactional bidding and auction results  
+**Version:** 0.8.0 — portal refinement and catalogue filters  
 **Status:** Internal development/testing only; bidding and result finalisation are implemented for controlled testing, not real auctions.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
@@ -59,7 +59,11 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
 - Staff catalogue displays item photos through an authenticated image endpoint.
-- Personal bid-history page, notification inbox, and read-only audit log.
+- Personal bid-history page grouped to one row per lot, expandable personal bid history, notification inbox, and read-only audit log.
+- Bid audit events record the source IP address and user agent; audit targets resolve to lot numbers, item names or affected user names.
+- Catalogue filters for active/upcoming/open/closed auctions, item category, lots already bid on and lots not yet bid on.
+- Database-backed item categories maintained by authorised procurement/custodian users.
+- Role-aware grouped navigation and administrator mail settings with a delivery test through the host's configured Postfix/PHP mail transport.
 - Signed-in employees can browse published items in scheduled auctions.
 - Audit events for auction and item creation and auction scheduling.
 
