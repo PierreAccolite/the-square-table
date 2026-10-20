@@ -3,7 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__,2).'/app/bootstrap.php';
 $user=require_role('admin','auditor');
 $filter=trim((string)($_GET['event']??''));$page=max(1,(int)($_GET['page']??1));$perPage=50;$offset=($page-1)*$perPage;
-$where='';$params=[];if($filter!==''){$where='WHERE e.event_type LIKE :event OR e.entity_type LIKE :event OR e.details_json LIKE :event';$params['event']='%'.$filter.'%';}
+$where='';$params=[];if($filter!==''){$where='WHERE (e.event_type LIKE :event1 OR e.entity_type LIKE :event2 OR e.details_json LIKE :event3)';$needle='%'.$filter.'%';$params=['event1'=>$needle,'event2'=>$needle,'event3'=>$needle];}
 $countQ=db()->prepare('SELECT COUNT(*) FROM audit_events e '.$where);$countQ->execute($params);$total=(int)$countQ->fetchColumn();
 $sql="SELECT e.id,e.actor_user_id,e.event_type,e.entity_type,e.entity_id,e.ip_address,e.user_agent,e.details_json,e.created_at,
              actor.username AS actor_username,actor.display_name AS actor_name,
