@@ -8,12 +8,12 @@ $now=(new DateTimeImmutable('now'))->format('Y-m-d H:i:s');
 $categoryFilter=trim((string)($_GET['category']??''));
 $bidFilter=(string)($_GET['my_bids']??'all');if(!in_array($bidFilter,['all','bid','unbid'],true))$bidFilter='all';
 $stateFilter=(string)($_GET['state']??'active');if(!in_array($stateFilter,['active','open','upcoming','closed'],true))$stateFilter='active';
-$categories=db()->query("SELECT DISTINCT category FROM auction_items WHERE category IS NOT NULL AND category<>'' ORDER BY category COLLATE NOCASE")->fetchAll(PDO::FETCH_COLUMN);
+$categories=db()->query('SELECT name FROM item_categories WHERE is_active=1 ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_COLUMN);
 $flash=(string)($_SESSION['bid_flash']??'');unset($_SESSION['bid_flash']);
 $auctionSql="SELECT id,title,description,starts_at,ends_at,status,anti_sniping_window_seconds FROM auctions WHERE ";
 $auctionParams=[];
 if($stateFilter==='closed'){$auctionSql.="(status='closed' OR (status IN ('scheduled','open') AND ends_at IS NOT NULL AND ends_at<=:now))";$auctionParams['now']=$now;}
-elseif($stateFilter==='open'){$auctionSql.="status IN ('scheduled','open') AND starts_at IS NOT NULL AND starts_at<=:now AND ends_at IS NOT NULL AND ends_at>:now";$auctionParams['now']=$now;}
+elseif($stateFilter==='open'){$auctionSql.="status IN ('scheduled','open') AND starts_at IS NOT NULL AND starts_at<=:start_now AND ends_at IS NOT NULL AND ends_at>:end_now";$auctionParams['start_now']=$now;$auctionParams['end_now']=$now;}
 elseif($stateFilter==='upcoming'){$auctionSql.="status IN ('scheduled','open') AND (starts_at IS NULL OR starts_at>:now)";$auctionParams['now']=$now;}
 else{$auctionSql.="status IN ('scheduled','open')";}
 $auctionSql.=" ORDER BY starts_at,id";
@@ -22,12 +22,12 @@ $itemsByAuction=[];
 if($auctions){
  $ids=array_map(static fn($a)=>(int)$a['id'],$auctions);
  $marks=implode(',',array_map(static fn($n)=>':auction'.$n,array_keys($ids)));
- $itemSql="SELECT i.id,i.auction_id,i.lot_number,i.title,i.description,i.condition_notes,i.category,i.image_path,i.opening_price_cents,i.minimum_increment_cents,i.buyout_enabled,i.buyout_price_cents,(SELECT COUNT(*) FROM bids b WHERE b.auction_item_id=i.id) AS bid_count,(SELECT MAX(b.amount_cents) FROM bids b WHERE b.auction_item_id=i.id) AS high_amount,(SELECT COUNT(*) FROM bids mine WHERE mine.auction_item_id=i.id AND mine.bidder_user_id=:uid) AS my_bid_count FROM auction_items i WHERE i.status='published' AND i.auction_id IN ($marks)";
- $itemParams=['uid'=>(int)$user['id']];
+ $itemSql="SELECT i.id,i.auction_id,i.lot_number,i.title,i.description,i.condition_notes,i.category,i.image_path,i.opening_price_cents,i.minimum_increment_cents,i.buyout_enabled,i.buyout_price_cents,(SELECT COUNT(*) FROM bids b WHERE b.auction_item_id=i.id) AS bid_count,(SELECT MAX(b.amount_cents) FROM bids b WHERE b.auction_item_id=i.id) AS high_amount,(SELECT COUNT(*) FROM bids mine WHERE mine.auction_item_id=i.id AND mine.bidder_user_id=:uid_count) AS my_bid_count FROM auction_items i WHERE i.status='published' AND i.auction_id IN ($marks)";
+ $itemParams=['uid_count'=>(int)$user['id']];
  foreach($ids as $idx=>$auctionId)$itemParams['auction'.$idx]=$auctionId;
  if($categoryFilter!==''){$itemSql.=" AND i.category=:category";$itemParams['category']=$categoryFilter;}
- if($bidFilter==='bid')$itemSql.=" AND EXISTS(SELECT 1 FROM bids mine WHERE mine.auction_item_id=i.id AND mine.bidder_user_id=:uid)";
- elseif($bidFilter==='unbid')$itemSql.=" AND NOT EXISTS(SELECT 1 FROM bids mine WHERE mine.auction_item_id=i.id AND mine.bidder_user_id=:uid)";
+ if($bidFilter==='bid'){$itemSql.=" AND EXISTS(SELECT 1 FROM bids mine WHERE mine.auction_item_id=i.id AND mine.bidder_user_id=:uid_filter)";$itemParams['uid_filter']=(int)$user['id'];}
+ elseif($bidFilter==='unbid'){$itemSql.=" AND NOT EXISTS(SELECT 1 FROM bids mine WHERE mine.auction_item_id=i.id AND mine.bidder_user_id=:uid_filter)";$itemParams['uid_filter']=(int)$user['id'];}
  $itemSql.=" ORDER BY auction_id,CAST(lot_number AS INTEGER),lot_number,id";
  $q=db()->prepare($itemSql);$q->execute($itemParams);foreach($q->fetchAll() as $item)$itemsByAuction[(int)$item['auction_id']][]=$item;
 }
