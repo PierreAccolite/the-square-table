@@ -20,7 +20,7 @@ function render_page_start(string $title,string $activeNav,array $user):void{
  <a class="nav-link<?= $activeNav==='reports'?' is-active':'' ?>" href="<?= e(app_url('admin/reports.php')) ?>">Reports</a>
  <a class="nav-link<?= $activeNav==='audit'?' is-active':'' ?>" href="<?= e(app_url('admin/audit.php')) ?>">Audit log</a>
  </div></details><?php endif; ?>
- <?php if($admin||$canProcure||$canApprove): ?><details class="nav-group"<?= in_array($activeNav,['admin','auctions','items','users','bulk-users','procurement','approvals','settings'],true)?' open':'' ?>><summary class="nav-link">Admin settings</summary><div class="nav-group-menu">
+ <?php if($admin||$canProcure||$canApprove): ?><details class="nav-group"<?= in_array($activeNav,['admin','auctions','items','users','bulk-users','categories','procurement','approvals','settings'],true)?' open':'' ?>><summary class="nav-link">Admin settings</summary><div class="nav-group-menu">
  <?php if($admin): ?>
  <a class="nav-link<?= $activeNav==='admin'?' is-active':'' ?>" href="<?= e(app_url('admin/index.php')) ?>">Overview</a>
  <a class="nav-link<?= $activeNav==='auctions'?' is-active':'' ?>" href="<?= e(app_url('admin/auctions.php')) ?>">Auctions</a>
