@@ -6,7 +6,7 @@ $auctions=(int)db()->query("SELECT COUNT(*) FROM auctions WHERE status IN ('sche
 $q=db()->prepare('SELECT COUNT(*) FROM bids WHERE bidder_user_id=:id');$q->execute(['id'=>$user['id']]);$bids=(int)$q->fetchColumn();
 // Keep this predicate aligned with the Staff Catalogue's visible-lot query.
 $catalogueItems=(int)db()->query("SELECT COUNT(*) FROM auction_items i JOIN auctions a ON a.id=i.auction_id WHERE i.status='published' AND a.status IN ('scheduled','open')")->fetchColumn();
-$openAuctions=(int)db()->query("SELECT COUNT(*) FROM auctions WHERE status='open' AND starts_at<=datetime('now','localtime') AND ends_at>datetime('now','localtime')")->fetchColumn();
+$now=(new DateTimeImmutable('now'))->format('Y-m-d H:i:s');$openQ=db()->prepare("SELECT COUNT(*) FROM auctions WHERE status IN ('scheduled','open') AND starts_at<=:start_now AND ends_at>:end_now");$openQ->execute(['start_now'=>$now,'end_now'=>$now]);$openAuctions=(int)$openQ->fetchColumn();
 ?>
 <?php require dirname(__DIR__).'/app/layout.php'; render_page_start('Dashboard','dashboard',$user); ?>
 <section class="welcome"><div><p class="eyebrow">STAFF SALES · YOUR PORTAL</p><h1>Good to see you, <?= e($user['display_name']) ?>.</h1><p class="muted">Explore staff sale items and follow your auction activity.</p></div><div class="welcome-icon">↗</div></section>
