@@ -57,9 +57,14 @@ function audit_log(?int $actor,string $event,?string $type=null,?string $entity=
  }catch(Throwable $ex){error_log('Staff Sales audit write failed: '.$ex->getMessage());if((string)app_config('app_env')==='production')throw $ex;}
 }
 function send_app_email(string $to,string $subject,string $body):bool{
- $to=trim($to);$from=trim((string)app_config('mail_from'));
- if(!filter_var($to,FILTER_VALIDATE_EMAIL)||!filter_var($from,FILTER_VALIDATE_EMAIL))return false;
+ $to=trim($to);$settings=[];
+ try{$q=db()->query("SELECT setting_key,setting_value FROM app_settings WHERE setting_key IN ('mail_from','mail_from_name','mail_enabled')");foreach($q->fetchAll() as $row)$settings[(string)$row['setting_key']]=(string)$row['setting_value'];}catch(Throwable $ignored){/* Existing installs can still use config/local.php before migrations are applied. */}
+ $enabled=$settings['mail_enabled']??'1';
+ $from=trim($settings['mail_from']??(string)app_config('mail_from'));
+ $fromName=trim($settings['mail_from_name']??'Staff Sales Auction Portal');
+ if($enabled!=='1'||!filter_var($to,FILTER_VALIDATE_EMAIL)||!filter_var($from,FILTER_VALIDATE_EMAIL))return false;
  $subject=str_replace(["\r","\n"],' ',$subject);
- $headers=['From: '.$from,'MIME-Version: 1.0','Content-Type: text/plain; charset=UTF-8','X-Content-Type-Options: nosniff'];
+ $fromName=str_replace(["\r","\n",'"','\\'],' ', $fromName);
+ $headers=['From: "'.$fromName.'" <'.$from.'>','MIME-Version: 1.0','Content-Type: text/plain; charset=UTF-8','X-Content-Type-Options: nosniff'];
  return mail($to,$subject,$body,implode("\r\n",$headers));
 }
