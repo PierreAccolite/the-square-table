@@ -7,15 +7,15 @@ $q=db()->prepare(
          i.id AS item_id,i.lot_number,i.title AS item_title,
          a.title AS auction_title,a.status AS auction_status,a.ends_at,
          (SELECT MAX(b2.amount_cents) FROM bids b2 WHERE b2.auction_item_id=i.id) AS current_high,
-         (SELECT MAX(b3.amount_cents) FROM bids b3 WHERE b3.auction_item_id=i.id AND b3.bidder_user_id=:uid) AS my_high,
-         (SELECT COUNT(*) FROM bids b4 WHERE b4.auction_item_id=i.id AND b4.bidder_user_id=:uid) AS my_bid_count
+         (SELECT MAX(b3.amount_cents) FROM bids b3 WHERE b3.auction_item_id=i.id AND b3.bidder_user_id=:uid_high) AS my_high,
+         (SELECT COUNT(*) FROM bids b4 WHERE b4.auction_item_id=i.id AND b4.bidder_user_id=:uid_count) AS my_bid_count
   FROM bids b
   JOIN auction_items i ON i.id=b.auction_item_id
   JOIN auctions a ON a.id=i.auction_id
-  WHERE b.bidder_user_id=:uid
+  WHERE b.bidder_user_id=:uid_where
   ORDER BY b.placed_at DESC,b.id DESC"
 );
-$q->execute(['uid'=>(int)$user['id']]);
+$q->execute(['uid_high'=>(int)$user['id'],'uid_count'=>(int)$user['id'],'uid_where'=>(int)$user['id']]);
 $allBids=$q->fetchAll();
 $items=[];
 foreach($allBids as $bid){
