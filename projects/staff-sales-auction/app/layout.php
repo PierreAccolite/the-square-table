@@ -29,6 +29,7 @@ function render_page_start(string $title,string $activeNav,array $user):void{
  <a class="nav-link<?= $activeNav==='bulk-users'?' is-active':'' ?>" href="<?= e(app_url('admin/bulk-users.php')) ?>">Bulk user upload</a>
  <a class="nav-link<?= $activeNav==='settings'?' is-active':'' ?>" href="<?= e(app_url('admin/settings.php')) ?>">Email settings</a>
  <?php endif; ?>
+ <?php if($admin||$canProcure): ?><a class="nav-link<?= $activeNav==='categories'?' is-active':'' ?>" href="<?= e(app_url('categories.php')) ?>">Item categories</a><?php endif; ?>
  <?php if($canProcure): ?><a class="nav-link<?= $activeNav==='procurement'?' is-active':'' ?>" href="<?= e(app_url('procurement.php')) ?>">Procurement</a><?php endif; ?>
  <?php if($canApprove): ?><a class="nav-link<?= $activeNav==='approvals'?' is-active':'' ?>" href="<?= e(app_url('admin/approvals.php')) ?>">Approvals</a><?php endif; ?>
  </div></details><?php endif; ?>
