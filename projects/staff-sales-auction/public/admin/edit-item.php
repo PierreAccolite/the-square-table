@@ -6,7 +6,7 @@ $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT) ?: (int)($_POST['item_id']?
 $q=db()->prepare('SELECT i.*,a.title AS auction_title,a.status AS auction_status FROM auction_items i JOIN auctions a ON a.id=i.auction_id WHERE i.id=:id');$q->execute(['id'=>$id]);$item=$q->fetch();
 if(!$item){http_response_code(404);exit('Auction item not found.');}
 $error='';
-$categories=['IT','Furniture','Spares','Tools','Office equipment','Vehicles','Other','Uncategorised'];
+$categories=db()->query('SELECT name FROM item_categories WHERE is_active=1 ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_COLUMN);
 function price_to_cents(string $value):?int{$value=trim(str_replace([' ', ','],['',''],$value));if($value===''||!preg_match('/^\\d{1,9}(?:\\.\\d{1,2})?$/',$value))return null;$parts=explode('.',$value,2);return ((int)$parts[0]*100)+(int)str_pad($parts[1]??'',2,'0');}
 function cents_to_price(int $value):string{return number_format($value/100,2,'.','');}
 if($_SERVER['REQUEST_METHOD']==='POST'){
