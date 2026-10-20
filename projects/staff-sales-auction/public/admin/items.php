@@ -9,7 +9,7 @@ function money_to_cents(string $value):?int{
  return ((int)$parts[0]*100)+(int)$fraction;
 }
 function cents_to_money(int $cents):string{return number_format($cents/100,2,'.','');}
-$categories=['IT','Furniture','Spares','Tools','Office equipment','Vehicles','Other','Uncategorised'];
+$categories=db()->query('SELECT name FROM item_categories WHERE is_active=1 ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_COLUMN);
 $auctions=db()->query('SELECT id,title,status FROM auctions ORDER BY created_at DESC,id DESC')->fetchAll();
 $selectedId=filter_input(INPUT_GET,'auction',FILTER_VALIDATE_INT) ?: (int)($auctions[0]['id']??0);
 $selected=null;foreach($auctions as $a){if((int)$a['id']===$selectedId){$selected=$a;break;}}
