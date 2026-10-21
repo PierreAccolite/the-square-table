@@ -11,7 +11,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   $pdo=db();$pdo->exec('BEGIN IMMEDIATE');
   try{
    $q=$pdo->prepare("SELECT r.id,r.auction_id,r.pending_disposition,r.result_status,i.* FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id undefined");$q->execute(['id'=>$resultId]);$source=$q->fetch();
-   if(!$source||$source['result_status']!=='unsold'||$source['pending_disposition']!=='pending')throw new RuntimeException('This item is no longer available in Pending Items.');
+   if(!$source||$source['result_status']!=='unsold'||$source['pending_disposition']!=='pending'||$source['source_results_status']!=='released')throw new RuntimeException('This item is no longer available in Pending Items.');
    $q=$pdo->prepare("SELECT id,title FROM auctions WHERE id=:id AND status='draft'");$q->execute(['id'=>$targetAuction]);$target=$q->fetch();
    if(!$target)throw new RuntimeException('Choose a destination auction that is still a draft.');
    $q=$pdo->prepare("INSERT INTO auction_items(auction_id,lot_number,title,description,condition_notes,image_path,opening_price_cents,minimum_increment_cents,status,created_at,updated_at,category,buyout_enabled,buyout_price_cents,source_item_id) VALUES(:auction,:lot,:title,:description,:condition,:image,:opening,:increment,'draft',:now,:now,:category,:buyout_enabled,:buyout_price,:source)");
