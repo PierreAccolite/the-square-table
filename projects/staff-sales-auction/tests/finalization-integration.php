@@ -96,8 +96,8 @@ try{
     $assert(release_auction_results($auctionId,$otherId)===true,'Approved close-out could not release results.');
     $assert((string)$pdo->query('SELECT results_status FROM auctions WHERE id='.(int)$auctionId)->fetchColumn()==='released','Approved results were not marked released.');
     $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===1,'Winner notification was not created on release.');
-    $q->execute(['item'=>$soldItem]);$sold=$q->fetch();$assert($sold['email_status']==='no_email','Missing winner email was not recorded after release.');
     finalise_expired_auctions();
+    $q->execute(['item'=>$soldItem]);$sold=$q->fetch();$assert($sold['email_status']==='no_email','Missing winner email was not recorded after release.');
     $assert((int)$pdo->query('SELECT COUNT(*) FROM auction_results WHERE auction_id='.(int)$auctionId)->fetchColumn()===2,'Repeated finalisation duplicated or lost results.');
     $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===1,'Repeated finalisation duplicated the winner notification.');
     echo "PASS: expired auction closes, highest bid wins, no-bid item is unsold, missing email is tracked, and finalisation is idempotent.\n";
