@@ -10,7 +10,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
  else{
   $pdo=db();$pdo->exec('BEGIN IMMEDIATE');
   try{
-   $q=$pdo->prepare("SELECT r.id,r.auction_id,r.pending_disposition,r.result_status,i.* FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id undefined");$q->execute(['id'=>$resultId]);$source=$q->fetch();
+   $q=$pdo->prepare("SELECT r.id AS result_id,r.auction_id,r.pending_disposition,r.result_status,i.*,a.results_status AS source_results_status FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id JOIN auctions a ON a.id=r.auction_id WHERE r.id=:id");$q->execute(['id'=>$resultId]);$source=$q->fetch();
    if(!$source||$source['result_status']!=='unsold'||$source['pending_disposition']!=='pending'||$source['source_results_status']!=='released')throw new RuntimeException('This item is no longer available in Pending Items.');
    $q=$pdo->prepare("SELECT id,title FROM auctions WHERE id=:id AND status='draft'");$q->execute(['id'=>$targetAuction]);$target=$q->fetch();
    if(!$target)throw new RuntimeException('Choose a destination auction that is still a draft.');
