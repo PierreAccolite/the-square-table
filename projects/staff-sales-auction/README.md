@@ -1,6 +1,6 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.7.0 — transactional bidding and auction results  
+**Version:** 0.10.0-beta — auction close-out, approved result release and pending inventory  
 **Status:** Internal development/testing only; bidding and result finalisation are implemented for controlled testing, not real auctions.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
@@ -34,7 +34,7 @@ php tools/check_environment.php
 
 See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 
-## Included in v0.7 development
+## Included in v0.8 development
 - SQLite schema and local setup wizard.
 - Login/logout foundation, password hashing, CSRF tokens, secure session settings and basic login throttling.
 - Employee dashboard with a staff catalogue entry point.
@@ -45,30 +45,41 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Publish individual catalogue items and schedule a draft auction after required dates and at least one published item are present.
 - Shared sticky navigation that adapts to employee, administrator and auditor roles.
 - Admin user management: create accounts, edit staff details and roles, enable/disable accounts, and reset passwords.
-- CSV bulk user import with row-level validation, duplicate detection and audit events.
+- CSV bulk user import with row-level validation, duplicate detection, optional email and permission assignment, and audit events.
 - Read-only admin/auditor reports for auction summaries, item catalogues, bid activity and user accounts, with CSV exports.
 - Item-level buyout toggle and configured buyout price; purchase transactions remain disabled.
 - Recorded bid counts on staff catalogue cards and the admin item list.
-- Independent bidder, procurement, custodian and approver permissions, combinable per account.
+- Independent bidder, power-user, procurement, custodian and approver permissions, combinable per account. Power users submit changes; procurement/custodians review; line managers approve finally.
+- Self-service account page to update display name/email and change password after confirming the current password.
 - Self-service password reset with single-use hashed tokens, 30-minute expiry, generic responses and rate limiting; requires staff email addresses and mail transport configuration.
 - Server-validated bidding with opening-price/minimum-increment enforcement and two-minute anti-sniping extensions.
-- CLI closing/finalisation job with unique result rows, internal winner notifications, and retryable winner-email delivery.
-- Private My Results page and administrator results dashboard.
+- CLI closing/finalisation job with unique provisional result rows; winner notifications and emails are held until procurement review and separate approval release results.
+- Auction close-out workflow: expiry closes bidding, procurement reviews sold/unsold outcomes, a different approver releases results, and released results become visible to staff.
+- Reusable Pending Items workflow for unsold lots: procurement can mark items pending, hold or withdraw them; pending items can be copied into a future draft auction with source-item history retained.
+- Private My Results page shows each employee only their own outcomes after release; a staff-facing approved Auction Results page shows sold/unsold outcomes and final prices without exposing winner identities; administrators retain the restricted detailed results dashboard.
 - Auction results and final-price CSV report.
-- Procurement/custodian item-change requests with reason, before/after comparison, separate-person approval, stale-request protection and audit logging.
+- Pending items can be selected into a new draft listing; the original lot, bids and result are retained.
+- Power users can submit catalogue-change requests; procurement/custodians review first and a different line manager/approver gives final approval.
+- Approval workflow stores the before/after values, review notes, reviewer identities/timestamps, stale-request protection and audit events.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
 - Staff catalogue displays item photos through an authenticated image endpoint.
-- Personal bid-history page, notification inbox, and read-only audit log.
+- Personal bid-history page grouped to one row per lot, expandable personal bid history, notification inbox, and read-only audit log.
+- Bid audit events record the source IP address and user agent; audit targets resolve to lot numbers, item names or affected user names.
+- Catalogue filters for active/upcoming/open/closed auctions, item category, lots already bid on and lots not yet bid on.
+- Database-backed item categories maintained by authorised procurement/custodian users.
+- Role-aware grouped navigation and administrator mail settings with a delivery test through the host's configured Postfix/PHP mail transport.
+- Configurable winner-only email instructions for payment/collection next steps; this portal does not process payments.
 - Signed-in employees can browse published items in scheduled auctions.
 - Audit events for auction and item creation and auction scheduling.
 
 ## Not included yet
-- The catalogue refreshes current bids and minimums every 10 seconds; a live countdown timer is not included.
-- Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing.
+- Catalogue current bids, minimums and auction deadlines refresh every 10 seconds, with a live countdown calibrated to server time.
+- Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing. Results remain hidden until procurement close-out and separate approval.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - Buyout/purchase-now transactions remain disabled.
-- Payment settlement, collection tracking, live countdown timer and production security certification.
+- Payment settlement and collection tracking inside the portal; winner emails provide configurable next-step instructions only.
+- Production security certification.
 
 **Important:** this remains a development/testing release. Bidding is enabled in code but has not been certified for real-money or business-critical auctions. Configure the finalisation job, verify mail transport, test backups/restore and exercise the test checklist on a disposable database before any operational use. Scheduling makes published catalogue items visible; the server opens bidding according to the configured start time.
 

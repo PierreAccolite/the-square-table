@@ -21,6 +21,8 @@ foreach($rows as $row){
   'id'=>(int)$row['id'],
   'auction_id'=>(int)$row['auction_id'],
   'auction_status'=>(string)$row['auction_status'],
+  'starts_at_epoch'=>empty($row['starts_at'])?null:(new DateTimeImmutable((string)$row['starts_at']))->getTimestamp(),
+  'ends_at_epoch'=>empty($row['ends_at'])?null:(new DateTimeImmutable((string)$row['ends_at']))->getTimestamp(),
   'auction_can_bid'=>in_array($row['auction_status'],['scheduled','open'],true)&&!empty($row['starts_at'])&&!empty($row['ends_at'])&&(string)$row['starts_at']<=$serverNow&&(string)$row['ends_at']>$serverNow,
   'auction_display_status'=>$row['auction_status']==='closed'?'Closed':($row['auction_status']==='cancelled'?'Cancelled':((!empty($row['starts_at'])&&(string)$row['starts_at']>$serverNow)?'Scheduled':((!empty($row['ends_at'])&&(string)$row['ends_at']<=$serverNow)?'Bidding closed':'Bidding open'))),
   'high_cents'=>$high,
@@ -28,4 +30,4 @@ foreach($rows as $row){
   'bid_count'=>(int)$row['bid_count']
  ];
 }
-echo json_encode(['items'=>$items,'server_time'=>$serverNow],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+echo json_encode(['items'=>$items,'server_time'=>$serverNow,'server_time_epoch'=>(new DateTimeImmutable('now'))->getTimestamp()],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);

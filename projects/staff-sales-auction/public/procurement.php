@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/app/bootstrap.php';
-$user=require_permission('procurement','custodian');
+$user=require_permission('power_user','procurement','custodian');
 $items=db()->query("SELECT i.id,i.lot_number,i.title,i.status AS item_status,i.opening_price_cents,i.minimum_increment_cents,a.title AS auction_title,a.status AS auction_status,(SELECT COUNT(*) FROM approval_requests r WHERE r.entity_type='auction_item' AND r.entity_id=i.id AND r.status='pending') AS pending_requests FROM auction_items i JOIN auctions a ON a.id=i.auction_id ORDER BY a.created_at DESC,a.id DESC,CAST(i.lot_number AS INTEGER),i.lot_number")->fetchAll();
 require dirname(__DIR__).'/app/layout.php';render_page_start('Procurement workspace','procurement',$user);
 ?>

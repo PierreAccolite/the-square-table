@@ -25,3 +25,18 @@
 
 /* Multi-permission administration and approval queue */
 .permission-fieldset{border:1px solid var(--border,#dce6e4);border-radius:12px;padding:14px 16px;margin:18px 0;background:rgba(247,250,249,.7)}.permission-fieldset legend{font-weight:700;padding:0 7px}.permission-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}.permission-grid label{display:flex;align-items:center;gap:8px;font-weight:500}.permission-grid input[type=checkbox],.permission-fieldset input[type=checkbox]{width:auto;margin:0}.approval-card{margin-bottom:18px}.approval-card .data-table td{white-space:normal;overflow-wrap:anywhere;max-width:380px}.approval-card .dashboard-actions{display:flex;gap:10px;flex-wrap:wrap}@media(max-width:600px){.permission-grid{grid-template-columns:1fr}.approval-card .dashboard-actions .button{width:100%}}
+
+
+/* Compact grouped navigation */
+.nav-group{position:relative;flex:none}.nav-group>summary{list-style:none;cursor:pointer;user-select:none}.nav-group>summary::-webkit-details-marker{display:none}.nav-group>summary::after{content:" ▾";font-size:.8em;opacity:.65}.nav-group[open]>summary{background:var(--surface-soft,#edf5f3)}.nav-group-menu{position:absolute;z-index:30;top:calc(100% + 7px);left:0;min-width:190px;display:flex;flex-direction:column;gap:3px;padding:8px;background:var(--panel,#fff);border:1px solid var(--border,#dce6e4);border-radius:14px;box-shadow:0 12px 30px rgba(10,40,38,.13)}.nav-group-menu .nav-link{white-space:nowrap}.catalogue-filters{display:flex;align-items:flex-end;flex-wrap:wrap;gap:14px}.catalogue-filters>div{display:flex;flex-direction:column;gap:5px;min-width:180px;flex:1}.catalogue-category{display:inline-flex;margin:5px 0 8px;align-self:flex-start}.bid-history{margin-top:8px}.bid-history summary{cursor:pointer;color:var(--accent,#005a64);font-weight:650;font-size:12px}.bid-history .table-wrap{margin-top:8px}
+@media(max-width:850px){.nav-group-menu{position:fixed;top:auto;left:12px;right:12px;max-width:calc(100vw - 24px);min-width:0;box-shadow:0 12px 30px rgba(10,40,38,.2)}.nav-group-menu .nav-link{white-space:normal}.catalogue-filters>div{min-width:145px}}
+
+
+/* Fix grouped navigation dropdown stacking and clipping */
+.app-navbar{position:sticky;z-index:2000;isolation:isolate;overflow:visible}
+.primary-nav{overflow-y:visible}
+.nav-group{z-index:2001}
+.nav-group[open]{z-index:2002}
+.nav-group-menu{z-index:2003}
+@media(min-width:851px){.primary-nav{overflow-x:visible;overflow-y:visible}}
+@media(max-width:850px){.primary-nav{overflow-x:auto;overflow-y:visible}.nav-group-menu{z-index:2003}}

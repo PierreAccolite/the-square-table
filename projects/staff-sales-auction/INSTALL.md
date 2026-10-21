@@ -1,6 +1,6 @@
-# Installation — Development release v0.7
+# Installation — Development release v0.10 beta
 
-This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release includes bidding and result finalisation for controlled development/testing only. Do not use it for a real auction.
+This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release includes bidding, procurement close-out and approved result release for controlled development/testing only. Do not use it for a real auction.
 
 ## Requirements
 - Python 3.8+ (standard library only; no pip packages required).
@@ -43,7 +43,7 @@ After the initial setup and after copying the latest files, run this from the pr
 php tools/apply_migrations.php
 ```
 
-The update is safe to rerun and preserves existing records. It applies migrations 002–005, including the buyout settings, independent permission assignments, item-change approval queue, staff email addresses, password-reset tokens and one-time auction results. Existing users and auction data are preserved. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
+The update is safe to rerun and preserves existing records. It applies migrations 002–010, including buyout settings, independent permissions (including power users), staged item-change approvals, staff email addresses, password-reset tokens, auction results, item categories, mail settings, close-out approval state and pending inventory tracking. Existing users and auction data are preserved. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
 
 ## 5. Verify the installation
 
@@ -64,10 +64,12 @@ Make sure the PHP web-server account can read the project files and write to the
 
 ### Email delivery for password resets and auction results
 
-1. In `config/local.php`, set `mail_from` to a real sender address accepted by your server, for example `'mail_from' => 'staff-sales@your-company-domain'`.
-2. Ensure PHP's `mail()` can hand messages to a configured local mail transport (such as the server's existing Postfix setup). This application does not connect directly to an SMTP server or store SMTP credentials.
-3. In **Users**, add a unique email address to each employee account. Existing accounts have no email address until you populate it.
-4. Test a reset request with a controlled staff account before relying on it. The page intentionally shows the same confirmation whether an account exists or not.
+1. Open **Admin Settings → Email settings** and configure the sender display name and sender email address.
+2. The portal hands messages to PHP's `mail()` function. If Postfix runs on the web server, ensure Postfix is configured to accept local mail and relay it as required. Relay host, port, TLS and credentials are managed by the host's Postfix configuration, not stored in the portal database.
+3. Use the settings page to send a test message. A successful result means PHP handed the message to the configured mail transport; check the recipient inbox and Postfix logs to confirm delivery.
+4. In **User management**, add a unique email address to each employee account. Existing accounts may have no email until you populate it.
+5. Staff can use **My account** to update their display name/email and change their password after confirming the current password.
+6. Test profile updates, password changes and reset requests with a controlled staff account. The reset request intentionally shows the same confirmation whether an account exists or not.
 
 Reset links expire after 30 minutes and are single-use. If mail transport is not configured, the portal will not be able to deliver reset links.
 

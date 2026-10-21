@@ -54,5 +54,68 @@ $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_auction ON auction_re
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_winner ON auction_results(winner_user_id,finalized_at)');
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_results_email ON auction_results(email_status,finalized_at)');
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'005_auction_results']);
-echo "Migrations 002, 003, 004 and 005 applied or already present. Existing data preserved.\n";
-echo "Permissions, approvals, password reset, bidding and auction result storage are available. Configure a scheduled CLI run for automatic finalisation.\n";
+// Migration 006: categorise lots without changing existing auction data.
+$itemColumns=$pdo->query('PRAGMA table_info(auction_items)')->fetchAll();
+$itemColumnNames=array_column($itemColumns,'name');
+if(!in_array('category',$itemColumnNames,true))$pdo->exec("ALTER TABLE auction_items ADD COLUMN category TEXT NOT NULL DEFAULT 'Uncategorised'");
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_auction_items_category ON auction_items(category,auction_id,status)');
+$pdo->exec("CREATE TABLE IF NOT EXISTS item_categories (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(length(name) BETWEEN 1 AND 80),is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')))");
+foreach(['IT','Furniture','Spares','Tools','Office equipment','Vehicles','Other','Uncategorised'] as $categoryName){$seed=$pdo->prepare('INSERT OR IGNORE INTO item_categories(name) VALUES(:name)');$seed->execute(['name'=>$categoryName]);}
+$pdo->exec("CREATE TABLE IF NOT EXISTS app_settings (setting_key TEXT PRIMARY KEY,setting_value TEXT NOT NULL,updated_by INTEGER,updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL)");
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'006_item_categories']);
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'007_mail_settings']);
+// Migration 008: staged procurement/custodian review followed by line-manager approval.
+$approvalColumns=$pdo->query('PRAGMA table_info(approval_requests)')->fetchAll();
+$approvalColumnNames=array_column($approvalColumns,'name');
+if(!in_array('approval_stage',$approvalColumnNames,true))$pdo->exec("ALTER TABLE approval_requests ADD COLUMN approval_stage TEXT NOT NULL DEFAULT 'procurement' CHECK(approval_stage IN ('procurement','manager'))");
+if(!in_array('procurement_reviewed_by',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_reviewed_by INTEGER REFERENCES users(id) ON DELETE RESTRICT');
+if(!in_array('procurement_reviewed_at',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_reviewed_at TEXT');
+if(!in_array('procurement_review_comment',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_review_comment TEXT');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_approval_stage_status ON approval_requests(status,approval_stage,created_at)');
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'008_staged_approvals']);
+// Migration 009: allow power users to submit catalogue changes for custodian and line-manager review.
+$permissionSql=(string)$pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='user_permissions'")->fetchColumn();
+if($permissionSql!==''&&!str_contains($permissionSql,'power_user')){
+ $pdo->beginTransaction();
+ try{
+  $pdo->exec("CREATE TABLE user_permissions_new (user_id INTEGER NOT NULL,permission TEXT NOT NULL CHECK(permission IN ('bidder','power_user','procurement','custodian','approver')),granted_by INTEGER,granted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),PRIMARY KEY(user_id,permission),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL)");
+  $pdo->exec('INSERT OR IGNORE INTO user_permissions_new(user_id,permission,granted_by,granted_at) SELECT user_id,permission,granted_by,granted_at FROM user_permissions');
+  $pdo->exec('DROP TABLE user_permissions');
+  $pdo->exec('ALTER TABLE user_permissions_new RENAME TO user_permissions');
+  $pdo->exec('CREATE INDEX IF NOT EXISTS idx_user_permissions_permission ON user_permissions(permission,user_id)');
+  $pdo->commit();
+ }catch(Throwable $ex){if($pdo->inTransaction())$pdo->rollBack();throw $ex;}
+}
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'009_power_user_permission']);
+// Repair item status for sold results created by earlier releases before awarded locking was added.
+$pdo->exec("UPDATE auction_items SET status='awarded',updated_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE status='published' AND EXISTS (SELECT 1 FROM auction_results r WHERE r.auction_item_id=auction_items.id AND r.result_status='sold')");
+
+/* Migration 010: auction close-out review, controlled results release and reusable unsold inventory. */
+$had010=(int)$pdo->query("SELECT COUNT(*) FROM schema_migrations WHERE version='010_auction_closeout_pending_items'")->fetchColumn()>0;
+$auctionCols=array_column($pdo->query('PRAGMA table_info(auctions)')->fetchAll(),'name');
+foreach([
+ 'results_status'=>"TEXT NOT NULL DEFAULT 'pending_review'",
+ 'procurement_reviewed_by'=>"INTEGER",
+ 'procurement_reviewed_at'=>"TEXT",
+ 'procurement_review_comment'=>"TEXT",
+ 'results_approved_by'=>"INTEGER",
+ 'results_approved_at'=>"TEXT",
+ 'results_approval_comment'=>"TEXT"
+] as $column=>$definition){if(!in_array($column,$auctionCols,true))$pdo->exec('ALTER TABLE auctions ADD COLUMN '.$column.' '.$definition);}
+$itemCols=array_column($pdo->query('PRAGMA table_info(auction_items)')->fetchAll(),'name');
+if(!in_array('source_item_id',$itemCols,true))$pdo->exec('ALTER TABLE auction_items ADD COLUMN source_item_id INTEGER');
+$resultCols=array_column($pdo->query('PRAGMA table_info(auction_results)')->fetchAll(),'name');
+if(!in_array('pending_disposition',$resultCols,true))$pdo->exec("ALTER TABLE auction_results ADD COLUMN pending_disposition TEXT NOT NULL DEFAULT 'not_reviewed'");
+if(!in_array('relisted_item_id',$resultCols,true))$pdo->exec('ALTER TABLE auction_results ADD COLUMN relisted_item_id INTEGER');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_auctions_results_status ON auctions(results_status,status,ends_at)');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_results_pending_disposition ON auction_results(result_status,pending_disposition,auction_id)');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_items_source_item ON auction_items(source_item_id)');
+if(!$had010){
+ // Preserve visibility of results that were already available before this workflow existed.
+ $pdo->exec("UPDATE auctions SET results_status='released' WHERE EXISTS (SELECT 1 FROM auction_results r WHERE r.auction_id=auctions.id)");
+ $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'010_auction_closeout_pending_items']);
+}
+
+echo "Migrations 002–010 applied or already present. Existing data preserved.\n";
+echo "Permissions, staged approvals, password recovery, item categories, bidding and auction result storage are available.\n";
+echo "Configure and test the scheduled CLI finalisation job before operational use.\n";

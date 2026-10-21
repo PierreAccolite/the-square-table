@@ -51,15 +51,10 @@ function finalise_expired_auctions(): void {
                     'price'=>$winner ? (int)$winner['amount_cents'] : 0,
                     'email'=>$winner ? 'pending' : 'not_applicable','now'=>$now
                 ]);
-                if($winner && $insert->rowCount()===1) {
-                    $notice=$pdo->prepare("INSERT INTO notifications(user_id,notification_type,title,message,created_at) VALUES(:uid,'auction_result',:title,:message,:now)");
-                    $notice->execute([
-                        'uid'=>(int)$winner['bidder_user_id'],
-                        'title'=>'Auction result: '.$item['title'],
-                        'message'=>'You won Lot '.$item['lot_number'].' in '.$auction['title'].' for N$ '.number_format((int)$winner['amount_cents']/100,2,'.',',').'.',
-                        'now'=>$now
-                    ]);
+                if($winner) {
+                    $pdo->prepare("UPDATE auction_items SET status='awarded',updated_at=:now WHERE id=:id AND status='published'")->execute(['now'=>$now,'id'=>(int)$item['id']]);
                 }
+                // Winner notifications are created only after procurement and approval release results.
             }
             $close=$pdo->prepare("UPDATE auctions SET status='closed',closed_at=COALESCE(closed_at,:closed_now),updated_at=:updated_now WHERE id=:id AND status IN ('scheduled','open')");
             $close->execute(['closed_now'=>$now,'updated_now'=>$now,'id'=>(int)$auction['id']]);
@@ -83,7 +78,7 @@ function finalise_expired_auctions(): void {
          JOIN auction_items i ON i.id=r.auction_item_id
          JOIN auctions a ON a.id=r.auction_id
          JOIN users u ON u.id=r.winner_user_id
-         WHERE r.email_status IN ('pending','failed') AND r.result_status='sold'
+         WHERE r.email_status IN ('pending','failed') AND r.result_status='sold' AND a.results_status='released'
          ORDER BY r.id LIMIT 100"
     )->fetchAll();
     foreach($jobs as $job) {
@@ -92,7 +87,9 @@ function finalise_expired_auctions(): void {
             continue;
         }
         $subject='Staff Sales Auction result: '.(string)$job['item_title'];
-        $body="Hello ".(string)$job['display_name'].",\n\nYou are recorded as the winning bidder for ".(string)$job['item_title']." (Lot ".(string)$job['lot_number'].") in ".(string)$job['auction_title'].".\nWinning amount: N$ ".number_format((int)$job['final_price_cents']/100,2,'.',',')."\n\nPlease follow the collection/payment instructions provided by the staff sales team. This message is a result notification, not a payment receipt.\n";
+        $instructions='Please contact the staff sales team to arrange payment and collection. Do not make payment until you receive the official instructions from the authorised team.';
+        try{$instructionQuery=$pdo->prepare("SELECT setting_value FROM app_settings WHERE setting_key='winner_instructions'");$instructionQuery->execute();$savedInstructions=$instructionQuery->fetchColumn();if(is_string($savedInstructions)&&trim($savedInstructions)!=='')$instructions=trim($savedInstructions);}catch(Throwable $ignored){}
+        $body="Hello ".(string)$job['display_name'].",\n\nYou are recorded as the winning bidder for ".(string)$job['item_title']." (Lot ".(string)$job['lot_number'].") in ".(string)$job['auction_title'].".\nWinning amount: N$ ".number_format((int)$job['final_price_cents']/100,2,'.',',')."\n\nPayment and collection instructions:\n".$instructions."\n\nThis message is a result notification, not a payment receipt. Do not send payment details or passwords by replying to this email.\n";
         try {
             $sent=send_app_email((string)$job['email'],$subject,$body);
             $pdo->prepare("UPDATE auction_results SET email_status=:status,email_sent_at=CASE WHEN :sent=1 THEN :now ELSE email_sent_at END,email_last_error=:error WHERE id=:id")
@@ -101,5 +98,39 @@ function finalise_expired_auctions(): void {
             error_log('Auction winner notification failed for result '.(int)$job['id'].': '.$e->getMessage());
             $pdo->prepare("UPDATE auction_results SET email_status='failed',email_last_error='Notification attempt failed; see server log' WHERE id=:id")->execute(['id'=>(int)$job['id']]);
         }
+    }
+}
+
+/**
+ * Release results only after the procurement review and separate approver sign-off.
+ * Notification creation and the state transition share one SQLite write transaction.
+ */
+function release_auction_results(int $auctionId,int $actorId,string $approvalComment=''): bool {
+    $pdo=db();
+    $pdo->exec('BEGIN IMMEDIATE');
+    try {
+        $q=$pdo->prepare('SELECT id,title,results_status,procurement_reviewed_by FROM auctions WHERE id=:id AND status=\'closed\'');
+        $q->execute(['id'=>$auctionId]);
+        $auction=$q->fetch();
+        if(!$auction) throw new RuntimeException('Only a closed auction can have its results released.');
+        if((string)$auction['results_status']==='released') { $pdo->exec('COMMIT'); return false; }
+        if((string)$auction['results_status']!=='awaiting_approval') throw new RuntimeException('Procurement must submit the close-out review before results can be released.');
+        if((int)($auction['procurement_reviewed_by']??0)===$actorId) throw new RuntimeException('A different person must approve the procurement review.');
+        $now=auction_now();
+        $q=$pdo->prepare("UPDATE auctions SET results_status='released',results_approved_by=:actor,results_approved_at=:now,results_approval_comment=:comment,updated_at=:now WHERE id=:id AND results_status='awaiting_approval'");
+        $q->execute(['actor'=>$actorId,'now'=>$now,'comment'=>trim($approvalComment)!==''?trim($approvalComment):null,'id'=>$auctionId]);
+        if($q->rowCount()!==1) throw new RuntimeException('The close-out state changed. Reload and review again.');
+        $rows=$pdo->prepare("SELECT r.id,r.final_price_cents,i.title,i.lot_number,u.id AS winner_user_id,a.title AS auction_title FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id JOIN auctions a ON a.id=r.auction_id JOIN users u ON u.id=r.winner_user_id WHERE r.auction_id=:auction AND r.result_status='sold' ORDER BY i.lot_number");
+        $rows->execute(['auction'=>$auctionId]);
+        $notice=$pdo->prepare("INSERT INTO notifications(user_id,notification_type,title,message,created_at) VALUES(:uid,'auction_result',:title,:message,:now)");
+        foreach($rows->fetchAll() as $row) {
+            $notice->execute(['uid'=>(int)$row['winner_user_id'],'title'=>'Auction result: '.$row['title'],'message'=>'You won Lot '.$row['lot_number'].' in '.$row['auction_title'].' for N$ '.number_format((int)$row['final_price_cents']/100,2,'.',',').'.','now'=>$now]);
+        }
+        audit_log($actorId,'auction.results_released','auction',(string)$auctionId,['title'=>$auction['title'],'released_at'=>$now,'approval_comment'=>trim($approvalComment)]);
+        $pdo->exec('COMMIT');
+        return true;
+    } catch(Throwable $e) {
+        try{$pdo->exec('ROLLBACK');}catch(Throwable $ignored){}
+        throw $e;
     }
 }

@@ -42,6 +42,7 @@ try {
             } else {
                 $insert=$pdo->prepare('INSERT INTO bids(auction_item_id,bidder_user_id,amount_cents,client_request_id,placed_at) VALUES(:item,:user,:amount,:request,:now)');
                 $insert->execute(['item'=>(int)$itemId,'user'=>(int)$user['id'],'amount'=>$amountCents,'request'=>$requestId,'now'=>(new DateTimeImmutable('now'))->format('Y-m-d H:i:s.u')]);
+                $bidId=(int)$pdo->lastInsertId();
                 $deadline=new DateTimeImmutable((string)$item['ends_at']);
                 $nowDt=new DateTimeImmutable($now);
                 $deadlineExtended=false;
@@ -54,8 +55,25 @@ try {
                 } else {
                     $pdo->prepare("UPDATE auctions SET status='open',updated_at=:now WHERE id=:id AND status='scheduled'")->execute(['now'=>$now,'id'=>(int)$item['auction_id']]);
                 }
-                $pdo->prepare("INSERT INTO audit_events(actor_user_id,event_type,entity_type,entity_id,details_json,created_at) VALUES(:actor,'bid.accepted','bid',:id,:details,:now)")
-                    ->execute(['actor'=>(int)$user['id'],'id'=>(string)$pdo->lastInsertId(),'details'=>json_encode(['auction_item_id'=>(int)$itemId,'amount_cents'=>$amountCents,'auction_id'=>(int)$item['auction_id'],'deadline_extended'=>$deadlineExtended,'ends_at'=>$newEnd],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),'now'=>$now]);
+                // Capture the address seen by the web server. Do not trust browser-supplied forwarding headers.
+                $ip=substr((string)($_SERVER['REMOTE_ADDR']??''),0,45)?:null;
+                $agent=substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,500)?:null;
+                $details=[
+                    'auction_item_id'=>(int)$itemId,
+                    'lot_number'=>(string)$item['lot_number'],
+                    'item_title'=>(string)$item['title'],
+                    'auction_id'=>(int)$item['auction_id'],
+                    'auction_title'=>(string)$item['auction_title'],
+                    'amount_cents'=>$amountCents,
+                    'deadline_extended'=>$deadlineExtended,
+                    'ends_at'=>$newEnd
+                ];
+                $pdo->prepare("INSERT INTO audit_events(actor_user_id,event_type,entity_type,entity_id,ip_address,user_agent,details_json,created_at) VALUES(:actor,'bid.accepted','bid',:id,:ip,:agent,:details,:now)")
+                    ->execute([
+                        'actor'=>(int)$user['id'],'id'=>(string)$bidId,'ip'=>$ip,'agent'=>$agent,
+                        'details'=>json_encode($details,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),
+                        'now'=>$now
+                    ]);
                 $pdo->exec('COMMIT');
                 $_SESSION['bid_flash']='Bid accepted: N$ '.number_format($amountCents/100,2,'.',',').'.';
                 redirect_to('auctions.php#auction-'.(int)$item['auction_id']);

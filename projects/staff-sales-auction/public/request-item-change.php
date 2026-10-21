@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/app/bootstrap.php';
-$user=require_permission('procurement','custodian');
+$user=require_permission('power_user','procurement','custodian');
 $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT) ?: (int)($_POST['item_id']??0);
 $q=db()->prepare('SELECT i.*,a.title AS auction_title FROM auction_items i JOIN auctions a ON a.id=i.auction_id WHERE i.id=:id');$q->execute(['id'=>$id]);$item=$q->fetch();
 if(!$item){http_response_code(404);exit('Auction item not found.');}
