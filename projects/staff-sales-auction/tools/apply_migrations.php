@@ -70,6 +70,7 @@ $approvalColumnNames=array_column($approvalColumns,'name');
 if(!in_array('approval_stage',$approvalColumnNames,true))$pdo->exec("ALTER TABLE approval_requests ADD COLUMN approval_stage TEXT NOT NULL DEFAULT 'procurement' CHECK(approval_stage IN ('procurement','manager'))");
 if(!in_array('procurement_reviewed_by',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_reviewed_by INTEGER REFERENCES users(id) ON DELETE RESTRICT');
 if(!in_array('procurement_reviewed_at',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_reviewed_at TEXT');
+if(!in_array('procurement_review_comment',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_review_comment TEXT');
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_approval_stage_status ON approval_requests(status,approval_stage,created_at)');
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'008_staged_approvals']);
 // Migration 009: allow power users to submit catalogue changes for custodian and line-manager review.
