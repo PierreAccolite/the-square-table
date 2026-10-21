@@ -64,8 +64,9 @@ if($auctions){
 (function(){
  const statusUrl=<?= json_encode(app_url('bid-status.php'),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
  const money=cents=>new Intl.NumberFormat('en-NA',{minimumFractionDigits:2,maximumFractionDigits:2}).format(cents/100);
+ let serverClockOffsetMs=0;
  function renderCountdowns(){
-  const now=Math.floor(Date.now()/1000);
+  const now=Math.floor((Date.now()-serverClockOffsetMs)/1000);
   for(const timer of document.querySelectorAll('.auction-countdown')){
    const end=Number(timer.dataset.endsAtEpoch||0);
    if(!end){timer.textContent='Not scheduled';continue;}
@@ -84,6 +85,7 @@ if($auctions){
    const response=await fetch(statusUrl,{cache:'no-store',headers:{'Accept':'application/json'}});
    if(!response.ok)return;
    const payload=await response.json();
+   if(typeof payload.server_time_epoch==='number')serverClockOffsetMs=Date.now()-(payload.server_time_epoch*1000);
    for(const item of payload.items||[]){
     const high=document.querySelector('.current-high[data-item-id="'+item.id+'"]');
     const minimum=document.querySelector('.minimum-next[data-item-id="'+item.id+'"]');
