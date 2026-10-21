@@ -51,6 +51,9 @@ function finalise_expired_auctions(): void {
                     'price'=>$winner ? (int)$winner['amount_cents'] : 0,
                     'email'=>$winner ? 'pending' : 'not_applicable','now'=>$now
                 ]);
+                if($winner) {
+                    $pdo->prepare("UPDATE auction_items SET status='awarded',updated_at=:now WHERE id=:id AND status='published'")->execute(['now'=>$now,'id'=>(int)$item['id']]);
+                }
                 if($winner && $insert->rowCount()===1) {
                     $notice=$pdo->prepare("INSERT INTO notifications(user_id,notification_type,title,message,created_at) VALUES(:uid,'auction_result',:title,:message,:now)");
                     $notice->execute([
