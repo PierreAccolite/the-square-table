@@ -15,7 +15,6 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   else{
    $header=fgetcsv($fh);
    $required=['username','display_name','employee_number','role','initial_password'];
-   $optional=['email','permissions'];
    $normal=array_map(static fn($v)=>strtolower(trim((string)$v)),is_array($header)?$header:[]);
    if(!$header||array_diff($required,$normal))$error='CSV header must contain: username, display_name, employee_number, role, initial_password.';
    else{
@@ -23,7 +22,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     while(($row=fgetcsv($fh))!==false){
      $line++;if(count($row)===1&&trim((string)$row[0])==='')continue;
      $v=[];foreach($required as $key)$v[$key]=trim((string)($row[$idx[$key]]??''));
-     $v['email']=trim((string)($row[$idx['email']]??''));$v['permissions']=trim((string)($row[$idx['permissions']]??''));
+     $v['email']=isset($idx['email'])?trim((string)($row[$idx['email']]??'')):'';$v['permissions']=isset($idx['permissions'])?trim((string)($row[$idx['permissions']]??'')):'';
      $permissions=$v['permissions']===''?[]:array_values(array_unique(array_map('trim',explode(';',$v['permissions']))));
      $allowedPermissions=['bidder','power_user','procurement','custodian','approver'];
      $why='';
