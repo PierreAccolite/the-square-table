@@ -44,7 +44,7 @@ if($auctions){
 <?php if(!$auctions): ?><section class="content-panel empty-state"><strong>No staff sales are published yet</strong><p>When an administrator schedules an auction, its published items will appear here.</p></section><?php else: foreach($auctions as $auction): ?>
 <section class="content-panel" id="auction-<?= (int)$auction['id'] ?>"><div class="section-heading"><div><p class="eyebrow">STAFF SALE</p><h2><?= e($auction['title']) ?></h2></div><?php $isOpen=!empty($auction['starts_at'])&&!empty($auction['ends_at'])&&(string)$auction['starts_at']<=$now&&(string)$auction['ends_at']>$now&&in_array($auction['status'],['scheduled','open'],true); ?><span class="status-pill auction-status" data-auction-id="<?= (int)$auction['id'] ?>"><?= $isOpen?'Bidding open':e(ucfirst($auction['status'])) ?></span></div>
 <?php if($auction['description']): ?><p class="muted"><?= nl2br(e($auction['description'])) ?></p><?php endif; ?>
-<div class="date-strip"><span><strong>Opens</strong><?= e($auction['starts_at']??'Not set') ?></span><span><strong>Closes</strong><?= e($auction['ends_at']??'Not set') ?></span></div>
+<div class="date-strip"><span><strong>Opens</strong><?= e($auction['starts_at']??'Not set') ?></span><span><strong>Closes</strong><?= e($auction['ends_at']??'Not set') ?></span><span><strong>Time remaining</strong><span class="auction-countdown" data-auction-id="<?= (int)$auction['id'] ?>" data-ends-at-epoch="<?= !empty($auction['ends_at'])?(new DateTimeImmutable((string)$auction['ends_at']))->getTimestamp():'' ?>">Calculating…</span></span></div>
 <?php $items=$itemsByAuction[(int)$auction['id']]??[]; if(!$items): ?><div class="empty-state"><p>No published items in this auction yet.</p></div><?php else: ?><div class="catalogue-grid"><?php foreach($items as $item):
  $high=$item['high_amount']===null?null:(int)$item['high_amount'];
  $minimum=$high===null?max(1,(int)$item['opening_price_cents']):$high+(int)$item['minimum_increment_cents'];
@@ -64,6 +64,21 @@ if($auctions){
 (function(){
  const statusUrl=<?= json_encode(app_url('bid-status.php'),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>;
  const money=cents=>new Intl.NumberFormat('en-NA',{minimumFractionDigits:2,maximumFractionDigits:2}).format(cents/100);
+ function renderCountdowns(){
+  const now=Math.floor(Date.now()/1000);
+  for(const timer of document.querySelectorAll('.auction-countdown')){
+   const end=Number(timer.dataset.endsAtEpoch||0);
+   if(!end){timer.textContent='Not scheduled';continue;}
+   let remaining=end-now;
+   if(remaining<=0){timer.textContent='Closing / closed';timer.classList.add('is-expired');continue;}
+   timer.classList.remove('is-expired');
+   const days=Math.floor(remaining/86400);remaining%=86400;
+   const hours=Math.floor(remaining/3600);remaining%=3600;
+   const minutes=Math.floor(remaining/60);const seconds=remaining%60;
+   const clock=[hours,minutes,seconds].map(n=>String(n).padStart(2,'0')).join(':');
+   timer.textContent=days>0?days+'d '+clock:clock;
+  }
+ }
  async function refreshBidStatus(){
   try{
    const response=await fetch(statusUrl,{cache:'no-store',headers:{'Accept':'application/json'}});
@@ -80,12 +95,14 @@ if($auctions){
     if(high)high.textContent=item.high_cents===null?'No bids yet':'N$ '+money(item.high_cents);
     if(minimum)minimum.textContent='N$ '+money(item.minimum_cents);
     if(count)count.textContent=String(item.bid_count);
-    if(auctionStatus)auctionStatus.textContent=item.auction_display_status;
+    if(auctionStatus){auctionStatus.textContent=item.auction_display_status;if(item.ends_at_epoch!==null&&item.ends_at_epoch!==undefined){const timer=document.querySelector('.auction-countdown[data-auction-id="'+item.auction_id+'"]');if(timer)timer.dataset.endsAtEpoch=String(item.ends_at_epoch);}}
     if(input){input.min=(item.minimum_cents/100).toFixed(2);input.placeholder=(item.minimum_cents/100).toFixed(2);input.disabled=!item.auction_can_bid;}
     if(submit){submit.disabled=!item.auction_can_bid;submit.textContent=item.auction_can_bid?'Place bid →':(item.auction_display_status==='Scheduled'?'Bidding not open yet':'Bidding closed');}
    }
   }catch(_error){/* Keep the last displayed values if polling is temporarily unavailable. */}
  }
+ renderCountdowns();
+ window.setInterval(renderCountdowns,1000);
  window.setInterval(refreshBidStatus,10000);
 })();
 </script>
