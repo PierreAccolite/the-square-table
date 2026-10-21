@@ -30,4 +30,4 @@ foreach($rows as $row){
   'bid_count'=>(int)$row['bid_count']
  ];
 }
-echo json_encode(['items'=>$items,'server_time'=>$serverNow],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+echo json_encode(['items'=>$items,'server_time'=>$serverNow,'server_time_epoch'=>(new DateTimeImmutable('now'))->getTimestamp()],JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
