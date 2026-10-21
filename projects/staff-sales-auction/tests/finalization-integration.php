@@ -50,6 +50,12 @@ try{
     $winnerId=(int)$pdo->lastInsertId();
     $userInsert->execute(['username'=>'otherbidder','name'=>'Other Bidder','hash'=>password_hash('TestPassword-12345',PASSWORD_DEFAULT)]);
     $otherId=(int)$pdo->lastInsertId();
+    save_user_permissions($otherId,['power_user'], $adminId);
+    $assert(in_array('power_user',user_permissions($otherId),true),'Power-user permission was not saved by the migrated schema.');
+    $approvalColumns=array_column($pdo->query('PRAGMA table_info(approval_requests)')->fetchAll(),'name');
+    $assert(in_array('approval_stage',$approvalColumns,true)&&in_array('procurement_reviewed_by',$approvalColumns,true)&&in_array('procurement_review_comment',$approvalColumns,true),'Staged approval migration is incomplete.');
+    $mailSettingTable=(int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='app_settings'")->fetchColumn();
+    $assert($mailSettingTable===1,'Mail settings table was not created by migrations.');
 
     $now=new DateTimeImmutable('now');
     $start=$now->modify('-2 hours')->format('Y-m-d H:i:s');
