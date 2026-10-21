@@ -93,8 +93,14 @@ try{
     $assert((string)$pdo->query('SELECT status FROM auctions WHERE id='.(int)$auctionId)->fetchColumn()==='closed','Expired auction was not closed.');
     $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===0,'Winner notification was created before release.');
     $pdo->prepare("UPDATE auctions SET results_status='awaiting_approval',procurement_reviewed_by=:reviewer WHERE id=:id")->execute(['reviewer'=>$adminId,'id'=>$auctionId]);
-    $assert(release_auction_results($auctionId,$otherId)===true,'Approved close-out could not release results.');
+    $publicBefore=(int)$pdo->query("SELECT COUNT(*) FROM auction_results r JOIN auctions a ON a.id=r.auction_id WHERE a.id=".(int)$auctionId." AND a.results_status='released'")->fetchColumn();
+    $assert($publicBefore===0,'Provisional results were visible before approval.');
+    $selfApprovalRejected=false;try{release_auction_results($auctionId,$adminId);}catch(RuntimeException $expected){$selfApprovalRejected=true;}
+    $assert($selfApprovalRejected,'Procurement reviewer was allowed to approve their own close-out.');
+    $assert(release_auction_results($auctionId,$otherId,'Integration test approval')===true,'Approved close-out could not release results.');
     $assert((string)$pdo->query('SELECT results_status FROM auctions WHERE id='.(int)$auctionId)->fetchColumn()==='released','Approved results were not marked released.');
+    $publicAfter=(int)$pdo->query("SELECT COUNT(*) FROM auction_results r JOIN auctions a ON a.id=r.auction_id WHERE a.id=".(int)$auctionId." AND a.results_status='released'")->fetchColumn();
+    $assert($publicAfter===2,'Approved results were not made visible after release.');
     $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===1,'Winner notification was not created on release.');
     finalise_expired_auctions();
     $q->execute(['item'=>$soldItem]);$sold=$q->fetch();$assert($sold['email_status']==='no_email','Missing winner email was not recorded after release.');
