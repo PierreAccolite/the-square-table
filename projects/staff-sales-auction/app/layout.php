@@ -12,6 +12,7 @@ function render_page_start(string $title,string $activeNav,array $user):void{
  <nav class="primary-nav" aria-label="Main navigation">
  <a class="nav-link<?= $activeNav==='dashboard'?' is-active':'' ?>" href="<?= e(app_url('index.php')) ?>"<?= $activeNav==='dashboard'?' aria-current="page"':'' ?>>Dashboard</a>
  <a class="nav-link<?= $activeNav==='catalogue'?' is-active':'' ?>" href="<?= e(app_url('auctions.php')) ?>"<?= $activeNav==='catalogue'?' aria-current="page"':'' ?>>Staff catalogue</a>
+ <a class="nav-link<?= $activeNav==='released-results'?' is-active':'' ?>" href="<?= e(app_url('auction-results.php')) ?>"<?= $activeNav==='released-results'?' aria-current="page"':'' ?>>Auction results</a>
  <details class="nav-group" name="staff-sales-nav-group"><summary class="nav-link">My activity</summary><div class="nav-group-menu">
  <a class="nav-link<?= $activeNav==='my-bids'?' is-active':'' ?>" href="<?= e(app_url('my-bids.php')) ?>">My bids</a>
  <a class="nav-link<?= $activeNav==='my-results'?' is-active':'' ?>" href="<?= e(app_url('my-results.php')) ?>">My results</a>
