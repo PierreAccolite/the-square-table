@@ -1,6 +1,6 @@
-# Installation — Development release v0.9 beta
+# Installation — Development release v0.10 beta
 
-This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release includes bidding and result finalisation for controlled development/testing only. Do not use it for a real auction.
+This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release includes bidding, procurement close-out and approved result release for controlled development/testing only. Do not use it for a real auction.
 
 ## Requirements
 - Python 3.8+ (standard library only; no pip packages required).
