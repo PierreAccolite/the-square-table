@@ -58,6 +58,9 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] Power user can submit item-change requests but cannot perform procurement/custodian review unless separately granted that permission.
 - [ ] Approval navigation is visible only to users with the relevant review permissions.
 - [ ] Employee can view only their own bid history and notifications.
+- [ ] Bulk user import accepts legacy CSVs without optional email/permissions columns.
+- [ ] Bulk user import validates optional email addresses and assigns only recognised permissions.
+- [ ] Duplicate email addresses are skipped with a useful row-level explanation.
 
 ## Bidding and auction finalisation (test on a disposable database)
 - [ ] Only signed-in bidders can submit bids; a scheduled auction's bid form stays disabled until opening and is disabled at closing.
