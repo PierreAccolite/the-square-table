@@ -68,7 +68,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Audit events for auction and item creation and auction scheduling.
 
 ## Not included yet
-- The catalogue refreshes current bids and minimums every 10 seconds; a live countdown timer is not included.
+- The catalogue refreshes current bids, minimums and auction deadlines every 10 seconds, with a live countdown calibrated to the server clock.
 - Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - Buyout/purchase-now transactions remain disabled.
