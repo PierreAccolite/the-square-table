@@ -72,6 +72,20 @@ if(!in_array('procurement_reviewed_by',$approvalColumnNames,true))$pdo->exec('AL
 if(!in_array('procurement_reviewed_at',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_reviewed_at TEXT');
 $pdo->exec('CREATE INDEX IF NOT EXISTS idx_approval_stage_status ON approval_requests(status,approval_stage,created_at)');
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'008_staged_approvals']);
-echo "Migrations 002–008 applied or already present. Existing data preserved.\n";
+// Migration 009: allow power users to submit catalogue changes for custodian and line-manager review.
+$permissionSql=(string)$pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='user_permissions'")->fetchColumn();
+if($permissionSql!==''&&!str_contains($permissionSql,'power_user')){
+ $pdo->beginTransaction();
+ try{
+  $pdo->exec("CREATE TABLE user_permissions_new (user_id INTEGER NOT NULL,permission TEXT NOT NULL CHECK(permission IN ('bidder','power_user','procurement','custodian','approver')),granted_by INTEGER,granted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),PRIMARY KEY(user_id,permission),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL)");
+  $pdo->exec('INSERT OR IGNORE INTO user_permissions_new(user_id,permission,granted_by,granted_at) SELECT user_id,permission,granted_by,granted_at FROM user_permissions');
+  $pdo->exec('DROP TABLE user_permissions');
+  $pdo->exec('ALTER TABLE user_permissions_new RENAME TO user_permissions');
+  $pdo->exec('CREATE INDEX IF NOT EXISTS idx_user_permissions_permission ON user_permissions(permission,user_id)');
+  $pdo->commit();
+ }catch(Throwable $ex){if($pdo->inTransaction())$pdo->rollBack();throw $ex;}
+}
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'009_power_user_permission']);
+echo "Migrations 002–009 applied or already present. Existing data preserved.\n";
 echo "Permissions, staged approvals, password recovery, item categories, bidding and auction result storage are available.\n";
 echo "Configure and test the scheduled CLI finalisation job before operational use.\n";
