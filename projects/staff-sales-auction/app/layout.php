@@ -4,7 +4,9 @@ function render_page_start(string $title,string $activeNav,array $user):void{
  $admin=($user['role']??'')==='admin';
  $auditor=($user['role']??'')==='auditor';
  $canApprove=has_permission($user,'approver');
- $canProcure=has_permission($user,'procurement')||has_permission($user,'custodian');
+ $canManageCategories=has_permission($user,'procurement')||has_permission($user,'custodian');
+ $canProcure=$canManageCategories||has_permission($user,'power_user');
+ $canReviewApprovals=$canManageCategories||$canApprove;
  ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= e($title) ?> · Staff Sales</title><link rel="stylesheet" href="<?= e(app_url('assets/css/app.css')) ?>"></head><body class="app-body">
  <header class="app-navbar"><a class="brand" href="<?= e(app_url('index.php')) ?>"><span class="brand-mark">SS</span><span><strong>Staff Sales</strong><small>Internal auction portal</small></span></a>
  <nav class="primary-nav" aria-label="Main navigation">
@@ -29,9 +31,9 @@ function render_page_start(string $title,string $activeNav,array $user):void{
  <a class="nav-link<?= $activeNav==='bulk-users'?' is-active':'' ?>" href="<?= e(app_url('admin/bulk-users.php')) ?>">Bulk user upload</a>
  <a class="nav-link<?= $activeNav==='settings'?' is-active':'' ?>" href="<?= e(app_url('admin/settings.php')) ?>">Email settings</a>
  <?php endif; ?>
- <?php if($admin||$canProcure): ?><a class="nav-link<?= $activeNav==='categories'?' is-active':'' ?>" href="<?= e(app_url('categories.php')) ?>">Item categories</a><?php endif; ?>
+ <?php if($admin||$canManageCategories): ?><a class="nav-link<?= $activeNav==='categories'?' is-active':'' ?>" href="<?= e(app_url('categories.php')) ?>">Item categories</a><?php endif; ?>
  <?php if($canProcure): ?><a class="nav-link<?= $activeNav==='procurement'?' is-active':'' ?>" href="<?= e(app_url('procurement.php')) ?>">Procurement</a><?php endif; ?>
- <?php if($canApprove||$canProcure): ?><a class="nav-link<?= $activeNav==='approvals'?' is-active':'' ?>" href="<?= e(app_url('admin/approvals.php')) ?>">Approvals</a><?php endif; ?>
+ <?php if($canReviewApprovals): ?><a class="nav-link<?= $activeNav==='approvals'?' is-active':'' ?>" href="<?= e(app_url('admin/approvals.php')) ?>">Approvals</a><?php endif; ?>
  </div></details><?php endif; ?>
  </nav>
  <div class="navbar-account"><a class="button button-quiet" href="<?= e(app_url('account.php')) ?>">My account</a><span class="user-chip"><strong><?= e($user['display_name']??$user['username']??'Staff') ?></strong><small><?= e(ucfirst((string)($user['role']??'employee'))) ?></small></span><form method="post" action="<?= e(app_url('logout.php')) ?>"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><button class="button button-quiet" type="submit">Sign out</button></form></div></header>
