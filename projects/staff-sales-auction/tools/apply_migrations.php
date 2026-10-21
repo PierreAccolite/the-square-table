@@ -64,6 +64,14 @@ foreach(['IT','Furniture','Spares','Tools','Office equipment','Vehicles','Other'
 $pdo->exec("CREATE TABLE IF NOT EXISTS app_settings (setting_key TEXT PRIMARY KEY,setting_value TEXT NOT NULL,updated_by INTEGER,updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S','now')),FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL)");
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'006_item_categories']);
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'007_mail_settings']);
-echo "Migrations 002–006 applied or already present. Existing data preserved.\n";
-echo "Permissions, approvals, password reset, item categories, bidding and auction result storage are available.\n";
+// Migration 008: staged procurement/custodian review followed by line-manager approval.
+$approvalColumns=$pdo->query('PRAGMA table_info(approval_requests)')->fetchAll();
+$approvalColumnNames=array_column($approvalColumns,'name');
+if(!in_array('approval_stage',$approvalColumnNames,true))$pdo->exec("ALTER TABLE approval_requests ADD COLUMN approval_stage TEXT NOT NULL DEFAULT 'procurement' CHECK(approval_stage IN ('procurement','manager'))");
+if(!in_array('procurement_reviewed_by',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_reviewed_by INTEGER REFERENCES users(id) ON DELETE RESTRICT');
+if(!in_array('procurement_reviewed_at',$approvalColumnNames,true))$pdo->exec('ALTER TABLE approval_requests ADD COLUMN procurement_reviewed_at TEXT');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_approval_stage_status ON approval_requests(status,approval_stage,created_at)');
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'008_staged_approvals']);
+echo "Migrations 002–008 applied or already present. Existing data preserved.\n";
+echo "Permissions, staged approvals, password recovery, item categories, bidding and auction result storage are available.\n";
 echo "Configure and test the scheduled CLI finalisation job before operational use.\n";
