@@ -63,7 +63,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     }
    }catch(Throwable $ex){if($pdo->inTransaction())$pdo->rollBack();throw $ex;}
   }
- }}
+ }
 }
 $users=db()->query('SELECT id,username,display_name,employee_number,email,role,status,created_at,last_login_at FROM users ORDER BY display_name COLLATE NOCASE,id')->fetchAll();
 require dirname(__DIR__,2).'/app/layout.php';render_page_start('User management','users',$user);
