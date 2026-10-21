@@ -31,7 +31,7 @@ function render_page_start(string $title,string $activeNav,array $user):void{
  <?php endif; ?>
  <?php if($admin||$canProcure): ?><a class="nav-link<?= $activeNav==='categories'?' is-active':'' ?>" href="<?= e(app_url('categories.php')) ?>">Item categories</a><?php endif; ?>
  <?php if($canProcure): ?><a class="nav-link<?= $activeNav==='procurement'?' is-active':'' ?>" href="<?= e(app_url('procurement.php')) ?>">Procurement</a><?php endif; ?>
- <?php if($canApprove): ?><a class="nav-link<?= $activeNav==='approvals'?' is-active':'' ?>" href="<?= e(app_url('admin/approvals.php')) ?>">Approvals</a><?php endif; ?>
+ <?php if($canApprove||$canProcure): ?><a class="nav-link<?= $activeNav==='approvals'?' is-active':'' ?>" href="<?= e(app_url('admin/approvals.php')) ?>">Approvals</a><?php endif; ?>
  </div></details><?php endif; ?>
  </nav>
  <div class="navbar-account"><a class="button button-quiet" href="<?= e(app_url('account.php')) ?>">My account</a><span class="user-chip"><strong><?= e($user['display_name']??$user['username']??'Staff') ?></strong><small><?= e(ucfirst((string)($user['role']??'employee'))) ?></small></span><form method="post" action="<?= e(app_url('logout.php')) ?>"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><button class="button button-quiet" type="submit">Sign out</button></form></div></header>
