@@ -105,7 +105,7 @@ function finalise_expired_auctions(): void {
  * Release results only after the procurement review and separate approver sign-off.
  * Notification creation and the state transition share one SQLite write transaction.
  */
-function release_auction_results(int $auctionId,int $actorId): bool {
+function release_auction_results(int $auctionId,int $actorId,string $approvalComment=''): bool {
     $pdo=db();
     $pdo->exec('BEGIN IMMEDIATE');
     try {
@@ -117,8 +117,8 @@ function release_auction_results(int $auctionId,int $actorId): bool {
         if((string)$auction['results_status']!=='awaiting_approval') throw new RuntimeException('Procurement must submit the close-out review before results can be released.');
         if((int)($auction['procurement_reviewed_by']??0)===$actorId) throw new RuntimeException('A different person must approve the procurement review.');
         $now=auction_now();
-        $q=$pdo->prepare("UPDATE auctions SET results_status='released',results_approved_by=:actor,results_approved_at=:now,updated_at=:now WHERE id=:id AND results_status='awaiting_approval'");
-        $q->execute(['actor'=>$actorId,'now'=>$now,'id'=>$auctionId]);
+        $q=$pdo->prepare("UPDATE auctions SET results_status='released',results_approved_by=:actor,results_approved_at=:now,results_approval_comment=:comment,updated_at=:now WHERE id=:id AND results_status='awaiting_approval'");
+        $q->execute(['actor'=>$actorId,'now'=>$now,'comment'=>trim($approvalComment)!==''?trim($approvalComment):null,'id'=>$auctionId]);
         if($q->rowCount()!==1) throw new RuntimeException('The close-out state changed. Reload and review again.');
         $rows=$pdo->prepare("SELECT r.id,r.final_price_cents,i.title,i.lot_number,u.id AS winner_user_id,a.title AS auction_title FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id JOIN auctions a ON a.id=r.auction_id JOIN users u ON u.id=r.winner_user_id WHERE r.auction_id=:auction AND r.result_status='sold' ORDER BY i.lot_number");
         $rows->execute(['auction'=>$auctionId]);
@@ -126,7 +126,7 @@ function release_auction_results(int $auctionId,int $actorId): bool {
         foreach($rows->fetchAll() as $row) {
             $notice->execute(['uid'=>(int)$row['winner_user_id'],'title'=>'Auction result: '.$row['title'],'message'=>'You won Lot '.$row['lot_number'].' in '.$row['auction_title'].' for N$ '.number_format((int)$row['final_price_cents']/100,2,'.',',').'.','now'=>$now]);
         }
-        audit_log($actorId,'auction.results_released','auction',(string)$auctionId,['title'=>$auction['title'],'released_at'=>$now]);
+        audit_log($actorId,'auction.results_released','auction',(string)$auctionId,['title'=>$auction['title'],'released_at'=>$now,'approval_comment'=>trim($approvalComment)]);
         $pdo->exec('COMMIT');
         return true;
     } catch(Throwable $e) {
