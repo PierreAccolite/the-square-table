@@ -10,7 +10,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
  else{
   $pdo=db();$pdo->exec('BEGIN IMMEDIATE');
   try{
-   $q=$pdo->prepare("SELECT r.id,r.auction_id,r.pending_disposition,r.result_status,i.* FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id WHERE r.id=:id");$q->execute(['id'=>$resultId]);$source=$q->fetch();
+   $q=$pdo->prepare("SELECT r.id,r.auction_id,r.pending_disposition,r.result_status,i.* FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id undefined");$q->execute(['id'=>$resultId]);$source=$q->fetch();
    if(!$source||$source['result_status']!=='unsold'||$source['pending_disposition']!=='pending')throw new RuntimeException('This item is no longer available in Pending Items.');
    $q=$pdo->prepare("SELECT id,title FROM auctions WHERE id=:id AND status='draft'");$q->execute(['id'=>$targetAuction]);$target=$q->fetch();
    if(!$target)throw new RuntimeException('Choose a destination auction that is still a draft.');
@@ -25,7 +25,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   }catch(Throwable $e){try{$pdo->exec('ROLLBACK');}catch(Throwable $ignored){}$error=str_contains(strtolower($e->getMessage()),'unique')?'That lot number is already used in the destination auction.':$e->getMessage();}
  }
 }
-$pending=db()->query("SELECT r.id AS result_id,r.auction_id AS source_auction_id,r.pending_disposition,i.id AS item_id,i.lot_number,i.title,i.description,i.condition_notes,i.category,i.image_path,i.opening_price_cents,i.minimum_increment_cents,i.buyout_enabled,i.buyout_price_cents,a.title AS source_auction,a.results_status FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id JOIN auctions a ON a.id=r.auction_id WHERE r.result_status='unsold' AND r.pending_disposition='pending' ORDER BY r.finalized_at,a.title,CAST(i.lot_number AS INTEGER),i.lot_number")->fetchAll();
+$pending=db()->query("SELECT r.id AS result_id,r.auction_id AS source_auction_id,r.pending_disposition,i.id AS item_id,i.lot_number,i.title,i.description,i.condition_notes,i.category,i.image_path,i.opening_price_cents,i.minimum_increment_cents,i.buyout_enabled,i.buyout_price_cents,a.title AS source_auction,a.results_status FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id JOIN auctions a ON a.id=r.auction_id WHERE r.result_status='unsold' AND r.pending_disposition='pending' AND a.results_status='released' ORDER BY r.finalized_at,a.title,CAST(i.lot_number AS INTEGER),i.lot_number")->fetchAll();
 $drafts=db()->query("SELECT id,title FROM auctions WHERE status='draft' ORDER BY created_at DESC,id DESC")->fetchAll();
 require dirname(__DIR__,2).'/app/layout.php';render_page_start('Pending items','pending-items',$user);
 ?>
