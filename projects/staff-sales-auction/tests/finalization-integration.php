@@ -79,6 +79,8 @@ try{
     $assert($sold['result_status']==='sold','Highest-bid item was not marked sold.');
     $assert((int)$sold['winner_user_id']===$winnerId,'The highest bidder was not selected as winner.');
     $assert((int)$sold['final_price_cents']===2000,'Final price does not match the highest accepted bid.');
+    $q=$pdo->prepare('SELECT status FROM auction_items WHERE id=:item');$q->execute(['item'=>$soldItem]);
+    $assert((string)$q->fetchColumn()==='awarded','Winning item was not locked as awarded.');
     $assert($sold['email_status']==='no_email','Missing winner email was not recorded.');
     $q->execute(['item'=>$unsoldItem]);$unsold=$q->fetch();
     $assert($unsold!==false&&$unsold['result_status']==='unsold','No-bid item was not marked unsold.');
