@@ -12,7 +12,7 @@ $categories=db()->query('SELECT name FROM item_categories WHERE is_active=1 ORDE
 $flash=(string)($_SESSION['bid_flash']??'');unset($_SESSION['bid_flash']);
 $auctionSql="SELECT id,title,description,starts_at,ends_at,status,results_status,anti_sniping_window_seconds FROM auctions WHERE ";
 $auctionParams=[];
-if($stateFilter==='closed'){$auctionSql.="(status='closed' AND results_status='released')";}
+if($stateFilter==='closed'){$auctionSql.="status='closed' AND results_status='released'";}
 elseif($stateFilter==='open'){$auctionSql.="status IN ('scheduled','open') AND starts_at IS NOT NULL AND starts_at<=:start_now AND ends_at IS NOT NULL AND ends_at>:end_now";$auctionParams['start_now']=$now;$auctionParams['end_now']=$now;}
 elseif($stateFilter==='upcoming'){$auctionSql.="status IN ('scheduled','open') AND (starts_at IS NULL OR starts_at>:now)";$auctionParams['now']=$now;}
 else{$auctionSql.="status IN ('scheduled','open')";}
