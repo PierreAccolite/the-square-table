@@ -22,7 +22,8 @@ $itemsByAuction=[];
 if($auctions){
  $ids=array_map(static fn($a)=>(int)$a['id'],$auctions);
  $marks=implode(',',array_map(static fn($n)=>':auction'.$n,array_keys($ids)));
- $itemSql="SELECT i.id,i.auction_id,i.lot_number,i.title,i.description,i.condition_notes,i.category,i.image_path,i.opening_price_cents,i.minimum_increment_cents,i.buyout_enabled,i.buyout_price_cents,(SELECT COUNT(*) FROM bids b WHERE b.auction_item_id=i.id) AS bid_count,(SELECT MAX(b.amount_cents) FROM bids b WHERE b.auction_item_id=i.id) AS high_amount,(SELECT COUNT(*) FROM bids mine WHERE mine.auction_item_id=i.id AND mine.bidder_user_id=:uid_count) AS my_bid_count FROM auction_items i WHERE i.status='published' AND i.auction_id IN ($marks)";
+ $itemStatusPredicate=$stateFilter==='closed'?"i.status IN ('published','awarded')":"i.status='published'";
+ $itemSql="SELECT i.id,i.auction_id,i.lot_number,i.title,i.description,i.condition_notes,i.category,i.image_path,i.opening_price_cents,i.minimum_increment_cents,i.buyout_enabled,i.buyout_price_cents,(SELECT COUNT(*) FROM bids b WHERE b.auction_item_id=i.id) AS bid_count,(SELECT MAX(b.amount_cents) FROM bids b WHERE b.auction_item_id=i.id) AS high_amount,(SELECT COUNT(*) FROM bids mine WHERE mine.auction_item_id=i.id AND mine.bidder_user_id=:uid_count) AS my_bid_count FROM auction_items i WHERE ".$itemStatusPredicate." AND i.auction_id IN ($marks)";
  $itemParams=['uid_count'=>(int)$user['id']];
  foreach($ids as $idx=>$auctionId)$itemParams['auction'.$idx]=$auctionId;
  if($categoryFilter!==''){$itemSql.=" AND i.category=:category";$itemParams['category']=$categoryFilter;}
