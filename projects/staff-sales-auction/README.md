@@ -45,11 +45,11 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Publish individual catalogue items and schedule a draft auction after required dates and at least one published item are present.
 - Shared sticky navigation that adapts to employee, administrator and auditor roles.
 - Admin user management: create accounts, edit staff details and roles, enable/disable accounts, and reset passwords.
-- CSV bulk user import with row-level validation, duplicate detection and audit events.
+- CSV bulk user import with row-level validation, duplicate detection, optional email and permission assignment, and audit events.
 - Read-only admin/auditor reports for auction summaries, item catalogues, bid activity and user accounts, with CSV exports.
 - Item-level buyout toggle and configured buyout price; purchase transactions remain disabled.
 - Recorded bid counts on staff catalogue cards and the admin item list.
-- Independent bidder, procurement, custodian and approver permissions, combinable per account.
+- Independent bidder, power-user, procurement, custodian and approver permissions, combinable per account. Power users submit changes; procurement/custodians review; line managers approve finally.
 - Self-service account page to update display name/email and change password after confirming the current password.
 - Self-service password reset with single-use hashed tokens, 30-minute expiry, generic responses and rate limiting; requires staff email addresses and mail transport configuration.
 - Server-validated bidding with opening-price/minimum-increment enforcement and two-minute anti-sniping extensions.
