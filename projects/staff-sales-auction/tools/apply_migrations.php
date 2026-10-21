@@ -87,6 +87,8 @@ if($permissionSql!==''&&!str_contains($permissionSql,'power_user')){
  }catch(Throwable $ex){if($pdo->inTransaction())$pdo->rollBack();throw $ex;}
 }
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'009_power_user_permission']);
+// Repair item status for sold results created by earlier releases before awarded locking was added.
+$pdo->exec("UPDATE auction_items SET status='awarded',updated_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE status='published' AND EXISTS (SELECT 1 FROM auction_results r WHERE r.auction_item_id=auction_items.id AND r.result_status='sold')");
 echo "Migrations 002–009 applied or already present. Existing data preserved.\n";
 echo "Permissions, staged approvals, password recovery, item categories, bidding and auction result storage are available.\n";
 echo "Configure and test the scheduled CLI finalisation job before operational use.\n";
