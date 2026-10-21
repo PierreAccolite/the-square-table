@@ -10,9 +10,9 @@ $bidFilter=(string)($_GET['my_bids']??'all');if(!in_array($bidFilter,['all','bid
 $stateFilter=(string)($_GET['state']??'active');if(!in_array($stateFilter,['active','open','upcoming','closed'],true))$stateFilter='active';
 $categories=db()->query('SELECT name FROM item_categories WHERE is_active=1 ORDER BY name COLLATE NOCASE')->fetchAll(PDO::FETCH_COLUMN);
 $flash=(string)($_SESSION['bid_flash']??'');unset($_SESSION['bid_flash']);
-$auctionSql="SELECT id,title,description,starts_at,ends_at,status,anti_sniping_window_seconds FROM auctions WHERE ";
+$auctionSql="SELECT id,title,description,starts_at,ends_at,status,results_status,anti_sniping_window_seconds FROM auctions WHERE ";
 $auctionParams=[];
-if($stateFilter==='closed'){$auctionSql.="(status='closed' OR (status IN ('scheduled','open') AND ends_at IS NOT NULL AND ends_at<=:now))";$auctionParams['now']=$now;}
+if($stateFilter==='closed'){$auctionSql.="(status='closed' AND results_status='released')";}
 elseif($stateFilter==='open'){$auctionSql.="status IN ('scheduled','open') AND starts_at IS NOT NULL AND starts_at<=:start_now AND ends_at IS NOT NULL AND ends_at>:end_now";$auctionParams['start_now']=$now;$auctionParams['end_now']=$now;}
 elseif($stateFilter==='upcoming'){$auctionSql.="status IN ('scheduled','open') AND (starts_at IS NULL OR starts_at>:now)";$auctionParams['now']=$now;}
 else{$auctionSql.="status IN ('scheduled','open')";}
