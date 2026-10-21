@@ -56,7 +56,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - CLI closing/finalisation job with unique provisional result rows; winner notifications and emails are held until procurement review and separate approval release results.
 - Auction close-out workflow: expiry closes bidding, procurement reviews sold/unsold outcomes, a different approver releases results, and released results become visible to staff.
 - Reusable Pending Items workflow for unsold lots: procurement can mark items pending, hold or withdraw them; pending items can be copied into a future draft auction with source-item history retained.
-- Private My Results page shows outcomes only after the auction's results are released, plus an administrator results dashboard.
+- Private My Results page shows each employee only their own outcomes after release; a staff-facing approved Auction Results page shows sold/unsold outcomes and final prices without exposing winner identities; administrators retain the restricted detailed results dashboard.
 - Auction results and final-price CSV report.
 - Pending items can be selected into a new draft listing; the original lot, bids and result are retained.
 - Power users can submit catalogue-change requests; procurement/custodians review first and a different line manager/approver gives final approval.
