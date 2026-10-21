@@ -38,9 +38,9 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
      else $seen[strtolower($v['username'])]=true;
      if($why!==''){$skipped[]=['line'=>$line,'username'=>$v['username'],'reason'=>$why];continue;}
      try{
-      $s=$pdo->prepare('INSERT INTO users(username,display_name,employee_number,password_hash,role,status) VALUES(:u,:d,:e,:p,:r,\'active\')');
-      $s->execute(['u'=>$v['username'],'d'=>$v['display_name'],'e'=>$v['employee_number']!==''?$v['employee_number']:null,'p'=>password_hash($v['initial_password'],PASSWORD_DEFAULT),'r'=>$v['role']]);
-      $id=(int)$pdo->lastInsertId();audit_log((int)$user['id'],'user.bulk_created','user',(string)$id,['role'=>$v['role'],'source_line'=>$line]);$created[]=$v['username'];
+      $s=$pdo->prepare('INSERT INTO users(username,display_name,employee_number,email,password_hash,role,status) VALUES(:u,:d,:e,:email,:p,:r,\'active\')');
+      $s->execute(['u'=>$v['username'],'d'=>$v['display_name'],'e'=>$v['employee_number']!==''?$v['employee_number']:null,'email'=>$v['email']!==''?$v['email']:null,'p'=>password_hash($v['initial_password'],PASSWORD_DEFAULT),'r'=>$v['role']]);
+      $id=(int)$pdo->lastInsertId();save_user_permissions($id,$permissions,(int)$user['id']);audit_log((int)$user['id'],'user.bulk_created','user',(string)$id,['role'=>$v['role'],'permissions'=>$permissions,'source_line'=>$line]);$created[]=$v['username'];
      }catch(PDOException $ex){if(str_contains(strtolower($ex->getMessage()),'unique'))$skipped[]=['line'=>$line,'username'=>$v['username'],'reason'=>'username or employee number already exists'];else throw $ex;}
     }
     fclose($fh);$summary=['created'=>count($created),'skipped'=>count($skipped)];
