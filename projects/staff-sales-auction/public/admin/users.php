@@ -51,8 +51,19 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
  }elseif($action==='reset_password'){
   $id=(int)($_POST['user_id']??0);$password=(string)($_POST['password']??'');
   if(!valid_new_password($password))$error='New password must be at least 12 characters.';
-  else{$q=db()->prepare('UPDATE users SET password_hash=:hash,updated_at=datetime(\'now\') WHERE id=:id');$q->execute(['hash'=>password_hash($password,PASSWORD_DEFAULT),'id'=>$id]);if($q->rowCount()){audit_log((int)$user['id'],'user.password_reset','user',(string)$id);redirect_to('admin/users.php?reset=1');}$error='User account not found.';}
- }
+  else{
+   $pdo=db();$pdo->beginTransaction();
+   try{
+    $q=$pdo->prepare('UPDATE users SET password_hash=:hash,updated_at=datetime(\'now\') WHERE id=:id');
+    $q->execute(['hash'=>password_hash($password,PASSWORD_DEFAULT),'id'=>$id]);
+    if($q->rowCount()===0){$pdo->rollBack();$error='User account not found.';}
+    else{
+     $q=$pdo->prepare("UPDATE password_reset_tokens SET used_at=datetime('now') WHERE user_id=:id AND used_at IS NULL");$q->execute(['id'=>$id]);
+     $pdo->commit();audit_log((int)$user['id'],'user.password_reset','user',(string)$id);redirect_to('admin/users.php?reset=1');
+    }
+   }catch(Throwable $ex){if($pdo->inTransaction())$pdo->rollBack();throw $ex;}
+  }
+ }}
 }
 $users=db()->query('SELECT id,username,display_name,employee_number,email,role,status,created_at,last_login_at FROM users ORDER BY display_name COLLATE NOCASE,id')->fetchAll();
 require dirname(__DIR__,2).'/app/layout.php';render_page_start('User management','users',$user);
