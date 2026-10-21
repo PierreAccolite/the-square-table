@@ -54,6 +54,10 @@ try{
     $assert(in_array('power_user',user_permissions($otherId),true),'Power-user permission was not saved by the migrated schema.');
     $approvalColumns=array_column($pdo->query('PRAGMA table_info(approval_requests)')->fetchAll(),'name');
     $assert(in_array('approval_stage',$approvalColumns,true)&&in_array('procurement_reviewed_by',$approvalColumns,true)&&in_array('procurement_review_comment',$approvalColumns,true),'Staged approval migration is incomplete.');
+    $auctionColumns=array_column($pdo->query('PRAGMA table_info(auctions)')->fetchAll(),'name');
+    $assert(in_array('results_status',$auctionColumns,true)&&in_array('procurement_reviewed_by',$auctionColumns,true)&&in_array('results_approved_by',$auctionColumns,true),'Auction close-out migration is incomplete.');
+    $resultColumns=array_column($pdo->query('PRAGMA table_info(auction_results)')->fetchAll(),'name');
+    $assert(in_array('pending_disposition',$resultColumns,true)&&in_array('relisted_item_id',$resultColumns,true),'Pending inventory migration is incomplete.');
     $mailSettingTable=(int)$pdo->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='app_settings'")->fetchColumn();
     $assert($mailSettingTable===1,'Mail settings table was not created by migrations.');
 
@@ -81,11 +85,18 @@ try{
     $assert((int)$sold['final_price_cents']===2000,'Final price does not match the highest accepted bid.');
     $statusQ=$pdo->prepare('SELECT status FROM auction_items WHERE id=:item');$statusQ->execute(['item'=>$soldItem]);
     $assert((string)$statusQ->fetchColumn()==='awarded','Winning item was not locked as awarded.');
-    $assert($sold['email_status']==='no_email','Missing winner email was not recorded.');
+    $assert($sold['email_status']==='pending','Winner email must wait until approved result release.');
+    $assert((string)$pdo->query('SELECT results_status FROM auctions WHERE id='.(int)$auctionId)->fetchColumn()==='pending_review','Newly closed auction did not enter procurement review.');
+    $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===0,'Winner was notified before results were approved.');
     $q->execute(['item'=>$unsoldItem]);$unsold=$q->fetch();
     $assert($unsold!==false&&$unsold['result_status']==='unsold','No-bid item was not marked unsold.');
     $assert((string)$pdo->query('SELECT status FROM auctions WHERE id='.(int)$auctionId)->fetchColumn()==='closed','Expired auction was not closed.');
-    $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===1,'Winner notification was not created exactly once.');
+    $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===0,'Winner notification was created before release.');
+    $pdo->prepare("UPDATE auctions SET results_status='awaiting_approval',procurement_reviewed_by=:reviewer WHERE id=:id")->execute(['reviewer'=>$adminId,'id'=>$auctionId]);
+    $assert(release_auction_results($auctionId,$otherId)===true,'Approved close-out could not release results.');
+    $assert((string)$pdo->query('SELECT results_status FROM auctions WHERE id='.(int)$auctionId)->fetchColumn()==='released','Approved results were not marked released.');
+    $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===1,'Winner notification was not created on release.');
+    $q->execute(['item'=>$soldItem]);$sold=$q->fetch();$assert($sold['email_status']==='no_email','Missing winner email was not recorded after release.');
     finalise_expired_auctions();
     $assert((int)$pdo->query('SELECT COUNT(*) FROM auction_results WHERE auction_id='.(int)$auctionId)->fetchColumn()===2,'Repeated finalisation duplicated or lost results.');
     $assert((int)$pdo->query("SELECT COUNT(*) FROM notifications WHERE user_id=".(int)$winnerId." AND notification_type='auction_result'")->fetchColumn()===1,'Repeated finalisation duplicated the winner notification.');

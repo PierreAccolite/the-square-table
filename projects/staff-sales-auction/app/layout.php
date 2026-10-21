@@ -32,7 +32,7 @@ function render_page_start(string $title,string $activeNav,array $user):void{
  <a class="nav-link<?= $activeNav==='settings'?' is-active':'' ?>" href="<?= e(app_url('admin/settings.php')) ?>">Email settings</a>
  <?php endif; ?>
  <?php if($admin||$canManageCategories): ?><a class="nav-link<?= $activeNav==='categories'?' is-active':'' ?>" href="<?= e(app_url('categories.php')) ?>">Item categories</a><?php endif; ?>
- <?php if($canProcure): ?><a class="nav-link<?= $activeNav==='procurement'?' is-active':'' ?>" href="<?= e(app_url('procurement.php')) ?>">Procurement</a><?php endif; ?>
+ <?php if($canProcure): ?><a class="nav-link<?= $activeNav==='procurement'?' is-active':'' ?>" href="<?= e(app_url('procurement.php')) ?>">Item changes</a><a class="nav-link<?= $activeNav==='closeout'?' is-active':'' ?>" href="<?= e(app_url('admin/closeout.php')) ?>">Auction close-out</a><a class="nav-link<?= $activeNav==='pending-items'?' is-active':'' ?>" href="<?= e(app_url('admin/pending-items.php')) ?>">Pending items</a><?php endif; ?>
  <?php if($canReviewApprovals): ?><a class="nav-link<?= $activeNav==='approvals'?' is-active':'' ?>" href="<?= e(app_url('admin/approvals.php')) ?>">Approvals</a><?php endif; ?>
  </div></details><?php endif; ?>
  </nav>

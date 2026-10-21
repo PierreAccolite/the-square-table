@@ -1,6 +1,6 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.9.0-beta — self-service and staged approval workflows  
+**Version:** 0.10.0-beta — auction close-out, approved result release and pending inventory  
 **Status:** Internal development/testing only; bidding and result finalisation are implemented for controlled testing, not real auctions.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
@@ -53,9 +53,12 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Self-service account page to update display name/email and change password after confirming the current password.
 - Self-service password reset with single-use hashed tokens, 30-minute expiry, generic responses and rate limiting; requires staff email addresses and mail transport configuration.
 - Server-validated bidding with opening-price/minimum-increment enforcement and two-minute anti-sniping extensions.
-- CLI closing/finalisation job with unique result rows, internal winner notifications, and retryable winner-email delivery.
-- Private My Results page and administrator results dashboard.
+- CLI closing/finalisation job with unique provisional result rows; winner notifications and emails are held until procurement review and separate approval release results.
+- Auction close-out workflow: expiry closes bidding, procurement reviews sold/unsold outcomes, a different approver releases results, and released results become visible to staff.
+- Reusable Pending Items workflow for unsold lots: procurement can mark items pending, hold or withdraw them; pending items can be copied into a future draft auction with source-item history retained.
+- Private My Results page shows outcomes only after the auction's results are released, plus an administrator results dashboard.
 - Auction results and final-price CSV report.
+- Pending items can be selected into a new draft listing; the original lot, bids and result are retained.
 - Power users can submit catalogue-change requests; procurement/custodians review first and a different line manager/approver gives final approval.
 - Approval workflow stores the before/after values, review notes, reviewer identities/timestamps, stale-request protection and audit events.
 - Auction editing for draft and scheduled auctions.
@@ -72,7 +75,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 
 ## Not included yet
 - Catalogue current bids, minimums and auction deadlines refresh every 10 seconds, with a live countdown calibrated to server time.
-- Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing.
+- Automatic closing depends on a scheduled CLI job; configure and verify it before testing time-based closing. Results remain hidden until procurement close-out and separate approval.
 - Item deletion is intentionally not offered; items can be withdrawn.
 - Buyout/purchase-now transactions remain disabled.
 - Payment settlement and collection tracking inside the portal; winner emails provide configurable next-step instructions only.

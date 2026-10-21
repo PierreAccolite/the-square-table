@@ -43,7 +43,7 @@ After the initial setup and after copying the latest files, run this from the pr
 php tools/apply_migrations.php
 ```
 
-The update is safe to rerun and preserves existing records. It applies migrations 002–009, including buyout settings, independent permissions (including power users), staged item-change approvals, staff email addresses, password-reset tokens, auction results, item categories and mail settings. Existing users and auction data are preserved. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
+The update is safe to rerun and preserves existing records. It applies migrations 002–010, including buyout settings, independent permissions (including power users), staged item-change approvals, staff email addresses, password-reset tokens, auction results, item categories, mail settings, close-out approval state and pending inventory tracking. Existing users and auction data are preserved. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
 
 ## 5. Verify the installation
 

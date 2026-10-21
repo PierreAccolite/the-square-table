@@ -76,7 +76,13 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] Expired auctions reject new bids even if the CLI finaliser has not yet run.
 - [ ] CLI finalisation closes expired auctions and creates exactly one result per published item.
 - [ ] Highest accepted bid wins; an item without bids is marked unsold.
-- [ ] Re-running finalisation does not duplicate results or internal winner notifications.
+- [ ] Re-running finalisation does not duplicate results.
+- [ ] Expiry moves a closed auction into procurement review; results remain hidden from employees.
+- [ ] Winner notifications and emails are not sent before results are approved and released.
+- [ ] Procurement can set unsold items to Pending, Hold or Withdrawn with an audit event.
+- [ ] A different approver can release results; the procurement reviewer cannot approve their own close-out.
+- [ ] Results become visible to staff and winner notifications become available only after release.
+- [ ] Pending unsold items can be copied into a future draft auction while original bids and results remain unchanged.
 - [ ] My Results exposes only the signed-in user's own outcomes.
 - [ ] Admin results and CSV reports include final price and notification status.
 - [ ] Missing/invalid winner email is recorded as no_email; mail transport failures are retryable.
