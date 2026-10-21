@@ -92,7 +92,9 @@ function finalise_expired_auctions(): void {
             continue;
         }
         $subject='Staff Sales Auction result: '.(string)$job['item_title'];
-        $body="Hello ".(string)$job['display_name'].",\n\nYou are recorded as the winning bidder for ".(string)$job['item_title']." (Lot ".(string)$job['lot_number'].") in ".(string)$job['auction_title'].".\nWinning amount: N$ ".number_format((int)$job['final_price_cents']/100,2,'.',',')."\n\nPlease follow the collection/payment instructions provided by the staff sales team. This message is a result notification, not a payment receipt.\n";
+        $instructions='Please contact the staff sales team to arrange payment and collection. Do not make payment until you receive the official instructions from the authorised team.';
+        try{$instructionQuery=$pdo->prepare("SELECT setting_value FROM app_settings WHERE setting_key='winner_instructions'");$instructionQuery->execute();$savedInstructions=$instructionQuery->fetchColumn();if(is_string($savedInstructions)&&trim($savedInstructions)!=='')$instructions=trim($savedInstructions);}catch(Throwable $ignored){}
+        $body="Hello ".(string)$job['display_name'].",\n\nYou are recorded as the winning bidder for ".(string)$job['item_title']." (Lot ".(string)$job['lot_number'].") in ".(string)$job['auction_title'].".\nWinning amount: N$ ".number_format((int)$job['final_price_cents']/100,2,'.',',')."\n\nPayment and collection instructions:\n".$instructions."\n\nThis message is a result notification, not a payment receipt. Do not send payment details or passwords by replying to this email.\n";
         try {
             $sent=send_app_email((string)$job['email'],$subject,$body);
             $pdo->prepare("UPDATE auction_results SET email_status=:status,email_sent_at=CASE WHEN :sent=1 THEN :now ELSE email_sent_at END,email_last_error=:error WHERE id=:id")
