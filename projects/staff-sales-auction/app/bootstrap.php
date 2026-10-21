@@ -46,7 +46,7 @@ function require_permission(string ...$permissions):array{
  http_response_code(403);exit('You do not have permission to access this page.');
 }
 function save_user_permissions(int $userId,array $permissions,int $actorId):void{
- $allowed=['bidder','procurement','custodian','approver'];$permissions=array_values(array_unique(array_intersect($permissions,$allowed)));
+ $allowed=['bidder','power_user','procurement','custodian','approver'];$permissions=array_values(array_unique(array_intersect($permissions,$allowed)));
  $pdo=db();$pdo->prepare('DELETE FROM user_permissions WHERE user_id=:id')->execute(['id'=>$userId]);
  $q=$pdo->prepare('INSERT INTO user_permissions(user_id,permission,granted_by) VALUES(:id,:permission,:actor)');
  foreach($permissions as $permission)$q->execute(['id'=>$userId,'permission'=>$permission,'actor'=>$actorId]);
