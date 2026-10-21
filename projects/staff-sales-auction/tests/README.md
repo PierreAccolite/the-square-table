@@ -81,7 +81,8 @@ Run on a disposable local SQLite database before internal deployment. Do not con
 - [ ] Winner notifications and emails are not sent before results are approved and released.
 - [ ] Procurement can set unsold items to Pending, Hold or Withdrawn with an audit event.
 - [ ] A different approver can release results; the procurement reviewer cannot approve their own close-out.
-- [ ] Results become visible to staff and winner notifications become available only after release.
+- [ ] Released auction results page shows only auctions approved for release and does not expose winner identities.
+- [ ] My Results shows only the signed-in user's outcomes after release; winner notifications become available only after release.
 - [ ] Pending unsold items can be copied into a future draft auction while original bids and results remain unchanged.
 - [ ] My Results exposes only the signed-in user's own outcomes.
 - [ ] Admin results and CSV reports include final price and notification status.
