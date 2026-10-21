@@ -43,7 +43,7 @@ After the initial setup and after copying the latest files, run this from the pr
 php tools/apply_migrations.php
 ```
 
-The update is safe to rerun and preserves existing records. It applies migrations 002–007, including buyout settings, independent permission assignments, item-change approval queue, staff email addresses, password-reset tokens, auction results, item categories and mail settings. Existing users and auction data are preserved. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
+The update is safe to rerun and preserves existing records. It applies migrations 002–009, including buyout settings, independent permissions (including power users), staged item-change approvals, staff email addresses, password-reset tokens, auction results, item categories and mail settings. Existing users and auction data are preserved. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
 
 ## 5. Verify the installation
 
@@ -68,7 +68,8 @@ Make sure the PHP web-server account can read the project files and write to the
 2. The portal hands messages to PHP's `mail()` function. If Postfix runs on the web server, ensure Postfix is configured to accept local mail and relay it as required. Relay host, port, TLS and credentials are managed by the host's Postfix configuration, not stored in the portal database.
 3. Use the settings page to send a test message. A successful result means PHP handed the message to the configured mail transport; check the recipient inbox and Postfix logs to confirm delivery.
 4. In **User management**, add a unique email address to each employee account. Existing accounts may have no email until you populate it.
-5. Test a reset request with a controlled staff account before relying on it. The page intentionally shows the same confirmation whether an account exists or not.
+5. Staff can use **My account** to update their display name/email and change their password after confirming the current password.
+6. Test profile updates, password changes and reset requests with a controlled staff account. The reset request intentionally shows the same confirmation whether an account exists or not.
 
 Reset links expire after 30 minutes and are single-use. If mail transport is not configured, the portal will not be able to deliver reset links.
 
