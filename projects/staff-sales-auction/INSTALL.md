@@ -1,4 +1,4 @@
-# Installation — Development release v0.10 beta
+# Installation — Development release v0.11 beta
 
 This folder is an installation package, not the live database. Run setup on the machine where PHP will run (for example, the internal Debian web server). This release includes bidding, procurement close-out and approved result release for controlled development/testing only. Do not use it for a real auction.
 
@@ -43,7 +43,7 @@ After the initial setup and after copying the latest files, run this from the pr
 php tools/apply_migrations.php
 ```
 
-The update is safe to rerun and preserves existing records. It applies migrations 002–010, including buyout settings, independent permissions (including power users), staged item-change approvals, staff email addresses, password-reset tokens, auction results, item categories, mail settings, close-out approval state and pending inventory tracking. Existing users and auction data are preserved. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
+The update is safe to rerun and preserves existing records. It applies migrations 002–011, including buyout settings, independent permissions (including power users), staged item-change approvals, staff email addresses, password-reset tokens, auction results, item categories, mail settings, close-out approval state, pending inventory tracking and line-manager assignments. Existing users and auction data are preserved. Existing users start with no assigned manager; use **User management → Edit account** to assign each employee an active administrator or user with the **Line manager / approver** permission. Final item-change approval is restricted to that assigned manager, who must differ from the requester and procurement reviewer. Buyout transactions remain disabled. Do not rerun the initial setup script just to apply this update.
 
 ## 5. Verify the installation
 
