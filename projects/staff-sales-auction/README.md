@@ -93,4 +93,6 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - `tools/` — local setup and diagnostics.
 - `tests/` — test plan and future automated tests.
 
-For upgrades, run `php tools/apply_migrations.php` from the installed project directory after backing up the database. Migration 011 adds the line-manager link without deleting existing user or auction data. Existing users start with no assigned manager and should be linked through User management before new item-change requests reach final approval.\n\nThe database and audit trail improve accountability but cannot, by themselves, make tampering impossible. Protect the live database and backups with operating-system permissions. Keep the database outside the web root and test backup/restore. Configure the web server's document root to the project's `public/` directory only.
+For upgrades, run `php tools/apply_migrations.php` from the installed project directory after backing up the database. Migration 011 adds the line-manager link without deleting existing user or auction data. Existing users start with no assigned manager and should be linked through User management before new item-change requests reach final approval.
+
+The database and audit trail improve accountability but cannot, by themselves, make tampering impossible. Protect the live database and backups with operating-system permissions. Keep the database outside the web root and test backup/restore. Configure the web server's document root to the project's `public/` directory only.
