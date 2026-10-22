@@ -1,6 +1,6 @@
 # Staff Sales Auction Portal
 
-**Version:** 0.10.0-beta — auction close-out, approved result release and pending inventory  
+**Version:** 0.11.0-beta — assigned line managers, automatic lot numbering and pending inventory  
 **Status:** Internal development/testing only; bidding and result finalisation are implemented for controlled testing, not real auctions.
 
 A new, independent internal staff auction application in the Square Table projects collection. Existing Staff Sales and Request Management Portal projects are not modified.
@@ -44,7 +44,7 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Store prices as integer cents.
 - Publish individual catalogue items and schedule a draft auction after required dates and at least one published item are present.
 - Shared sticky navigation that adapts to employee, administrator and auditor roles.
-- Admin user management: create accounts, edit staff details and roles, enable/disable accounts, and reset passwords.
+- Admin user management: create accounts, edit staff details and roles in a responsive edit panel, assign each employee a line manager, enable/disable accounts, and reset passwords.
 - CSV bulk user import with row-level validation, duplicate detection, optional email and permission assignment, and audit events.
 - Read-only admin/auditor reports for auction summaries, item catalogues, bid activity and user accounts, with CSV exports.
 - Item-level buyout toggle and configured buyout price; purchase transactions remain disabled.
@@ -58,9 +58,9 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - Reusable Pending Items workflow for unsold lots: procurement can mark items pending, hold or withdraw them; pending items can be copied into a future draft auction with source-item history retained.
 - Private My Results page shows each employee only their own outcomes after release; a staff-facing approved Auction Results page shows sold/unsold outcomes and final prices without exposing winner identities; administrators retain the restricted detailed results dashboard.
 - Auction results and final-price CSV report.
-- Pending items can be selected into a new draft listing; the original lot, bids and result are retained.
-- Power users can submit catalogue-change requests; procurement/custodians review first and a different line manager/approver gives final approval.
-- Approval workflow stores the before/after values, review notes, reviewer identities/timestamps, stale-request protection and audit events.
+- Pending items can be selected directly from Manage Items or the dedicated Pending Items page; each copy gets the next automatic lot number in its destination auction while original lot, bids and result are retained.
+- Power users can submit catalogue-change requests; procurement/custodians review first and the requester's assigned active line manager/approver gives final approval. User management supports assigning line managers, and the approval handler enforces that assignment.
+- Approval workflow stores before/after values, review notes, reviewer identities/timestamps, assigned-manager enforcement, stale-request protection and audit events.
 - Auction editing for draft and scheduled auctions.
 - Item editing, draft/published/withdrawn status, and protected JPEG/PNG/WebP item-image uploads.
 - Staff catalogue displays item photos through an authenticated image endpoint.
@@ -93,4 +93,4 @@ See [INSTALL.md](INSTALL.md) for the step-by-step walkthrough.
 - `tools/` — local setup and diagnostics.
 - `tests/` — test plan and future automated tests.
 
-The database and audit trail improve accountability but cannot, by themselves, make tampering impossible. Protect the live database and backups with operating-system permissions. Keep the database outside the web root and test backup/restore. Configure the web server's document root to the project's `public/` directory only.
+For upgrades, run `php tools/apply_migrations.php` from the installed project directory after backing up the database. Migration 011 adds the line-manager link without deleting existing user or auction data. Existing users start with no assigned manager and should be linked through User management before new item-change requests reach final approval.\n\nThe database and audit trail improve accountability but cannot, by themselves, make tampering impossible. Protect the live database and backups with operating-system permissions. Keep the database outside the web root and test backup/restore. Configure the web server's document root to the project's `public/` directory only.
