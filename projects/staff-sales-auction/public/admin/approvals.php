@@ -11,7 +11,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
  $pdo=db();$q=$pdo->prepare("SELECT * FROM approval_requests WHERE id=:id AND status='pending'");$q->execute(['id'=>$rid]);$req=$q->fetch();
  $assignedManagerId=0;
  if($req&&($req['approval_stage']??'procurement')==='manager'){
-  $mq=$pdo->prepare('SELECT manager_user_id FROM users WHERE id=:id');$mq->execute(['id'=>(int)$req['requested_by']);$assignedManagerId=(int)($mq->fetchColumn()?:0);
+  $mq=$pdo->prepare('SELECT manager_user_id FROM users WHERE id=:id');$mq->execute(['id'=>(int)$req['requested_by']]);$assignedManagerId=(int)($mq->fetchColumn()?:0);
  }
  if(!$req)$error='This request is no longer pending.';
  elseif((int)$req['requested_by']===(int)$user['id'])$error='You cannot review your own change request.';
