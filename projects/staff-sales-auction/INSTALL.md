@@ -24,7 +24,7 @@ The script checks Python, PHP CLI, PDO SQLite support, the migration file, requi
 
 On a new installation it creates `storage/database/staff_sales_auction.sqlite` and applies the initial schema.
 
-## 3. Create the first administrator
+## 3. Apply database updates to an existing installation\n\nBefore upgrading an existing installation, take a verified backup of the SQLite database, then run:\n\n```sh\nphp tools/apply_migrations.php\n```\n\nThe migration runner applies additive updates and preserves existing records. Migration 011 adds the optional line-manager assignment. After updating the code, use **User management → Edit account** to assign each employee an active administrator or user with the **Line manager / approver** permission. Final item-change approval is restricted to that assigned manager, who must differ from the requester and procurement reviewer.\n\n## 4. Create the first administrator
 At the end of setup, the script starts the PHP administrator wizard. Enter:
 1. An administrator username (3–80 lowercase letters, numbers, dots, underscores or hyphens).
 2. Display name.
