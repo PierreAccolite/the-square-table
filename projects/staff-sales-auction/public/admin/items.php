@@ -48,8 +48,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     $q=$pdo->prepare("UPDATE auction_results SET pending_disposition='relisted',relisted_item_id=:new_item WHERE id=:id AND pending_disposition='pending'");$q->execute(['new_item'=>$newItemId,'id'=>(int)$source['result_id']]);
     if($q->rowCount()!==1)throw new RuntimeException('Pending-item state changed. Reload and try again.');
     audit_log((int)$user['id'],'auction.unsold_item_relisted','auction_item',(string)$newItemId,['source_item_id'=>(int)$source['id'],'source_result_id'=>(int)$source['result_id'],'source_auction_id'=>(int)$source['auction_id'],'target_auction_id'=>$selectedId,'new_lot_number'=>$lot]);
-    $pdo->commit();redirect_to('admin/items.php?auction='.$selectedId.'&relisted=1');
-   }catch(Throwable $ex){if($pdo->inTransaction())$pdo->rollBack();if($ex instanceof PDOException&&str_contains(strtolower($ex->getMessage()),'unique'))$error='The next lot number is already in use. Reload and try again.';elseif($ex instanceof RuntimeException)$error=$ex->getMessage();else throw $ex;}
+    $pdo->exec('COMMIT');redirect_to('admin/items.php?auction='.$selectedId.'&relisted=1');
+   }catch(Throwable $ex){try{$pdo->exec('ROLLBACK');}catch(Throwable $ignored){}if($ex instanceof PDOException&&str_contains(strtolower($ex->getMessage()),'unique'))$error='The next lot number is already in use. Reload and try again.';elseif($ex instanceof RuntimeException)$error=$ex->getMessage();else throw $ex;}
   }
  }elseif($action==='create_item'){
   $title=trim((string)($_POST['title']??''));$description=trim((string)($_POST['description']??''));$condition=trim((string)($_POST['condition_notes']??''));$category=trim((string)($_POST['category']??'Uncategorised'));
@@ -67,10 +67,10 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     $lot=next_lot_number($pdo,$selectedId);
     $q=$pdo->prepare('INSERT INTO auction_items(auction_id,lot_number,title,description,condition_notes,category,opening_price_cents,minimum_increment_cents,status,buyout_enabled,buyout_price_cents) VALUES(:auction,:lot,:title,:description,:condition,:category,:opening,:increment,:status,:buyout_enabled,:buyout_price)');
     $q->execute(['auction'=>$selectedId,'lot'=>$lot,'title'=>$title,'description'=>$description!==''?$description:null,'condition'=>$condition!==''?$condition:null,'category'=>$category,'opening'=>$opening,'increment'=>$increment,'status'=>$status,'buyout_enabled'=>$buyoutEnabled,'buyout_price'=>$buyoutEnabled?$buyoutPrice:null]);
-    $id=(int)$pdo->lastInsertId();$pdo->commit();
+    $id=(int)$pdo->lastInsertId();$pdo->exec('COMMIT');
     audit_log((int)$user['id'],'auction_item.created','auction_item',(string)$id,['auction_id'=>$selectedId,'lot_number'=>$lot,'title'=>$title,'category'=>$category,'status'=>$status]);
     redirect_to('admin/items.php?auction='.$selectedId.'&saved=1');
-   }catch(Throwable $ex){if($pdo->inTransaction())$pdo->rollBack();if($ex instanceof PDOException&&str_contains(strtolower($ex->getMessage()),'unique'))$error='The next lot number is already in use. Reload and try again.';else throw $ex;}
+   }catch(Throwable $ex){try{$pdo->exec('ROLLBACK');}catch(Throwable $ignored){}if($ex instanceof PDOException&&str_contains(strtolower($ex->getMessage()),'unique'))$error='The next lot number is already in use. Reload and try again.';else throw $ex;}
   }
  }else{$error='Invalid item action.';}
 }
