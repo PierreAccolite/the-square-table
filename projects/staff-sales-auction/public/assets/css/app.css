@@ -40,3 +40,17 @@
 .nav-group-menu{z-index:2003}
 @media(min-width:851px){.primary-nav{overflow-x:visible;overflow-y:visible}}
 @media(max-width:850px){.primary-nav{overflow-x:auto;overflow-y:visible}.nav-group-menu{z-index:2003}}
+
+
+/* Account editor opens as a viewport-level panel, not inside the table cell */
+.account-editor{display:inline-block;position:static;min-width:0}
+.account-editor>summary{display:inline-flex;cursor:pointer;white-space:nowrap}
+.account-editor[open]::before{content:"";position:fixed;inset:0;background:rgba(13,35,38,.48);z-index:4000}
+.account-editor .account-editor-panel{display:none}
+.account-editor[open] .account-editor-panel{display:block;position:fixed;z-index:4001;left:50%;top:50%;transform:translate(-50%,-50%);width:min(780px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;background:#fff;border:1px solid var(--line);border-radius:18px;padding:clamp(18px,3vw,30px);box-shadow:0 24px 80px rgba(5,30,33,.28)}
+.account-editor-panel .reset-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
+.account-editor-panel .reset-form>label,.account-editor-panel .reset-form>input,.account-editor-panel .reset-form>select,.account-editor-panel .reset-form>fieldset,.account-editor-panel .reset-form>.account-editor-actions,.account-editor-panel .reset-form>.form-help{grid-column:1/-1}
+.account-editor-panel .reset-form input,.account-editor-panel .reset-form select{width:100%;min-width:0}
+.account-editor-panel .permission-fieldset{margin:10px 0}
+.account-editor-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+@media(max-width:600px){.account-editor[open] .account-editor-panel{width:calc(100vw - 20px);max-height:calc(100vh - 20px);padding:16px}.account-editor-panel .reset-form{grid-template-columns:1fr}}
