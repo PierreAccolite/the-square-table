@@ -116,6 +116,12 @@ if(!$had010){
  $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'010_auction_closeout_pending_items']);
 }
 
-echo "Migrations 002–010 applied or already present. Existing data preserved.\n";
+// Migration 011: link each employee to an authorised line manager for final item-change approvals.
+$userColumns=array_column($pdo->query('PRAGMA table_info(users)')->fetchAll(),'name');
+if(!in_array('manager_user_id',$userColumns,true))$pdo->exec('ALTER TABLE users ADD COLUMN manager_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+$pdo->exec('CREATE INDEX IF NOT EXISTS idx_users_manager_user_id ON users(manager_user_id)');
+$pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'011_line_manager_assignment']);
+
+echo "Migrations 002–011 applied or already present. Existing data preserved.\n";
 echo "Permissions, staged approvals, password recovery, item categories, bidding and auction result storage are available.\n";
 echo "Configure and test the scheduled CLI finalisation job before operational use.\n";
