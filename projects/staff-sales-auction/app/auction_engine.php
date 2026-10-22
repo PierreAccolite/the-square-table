@@ -23,7 +23,7 @@ function auction_high_bid(int $itemId): ?array {
  * Results are unique per item, so repeated cron runs cannot create duplicate winners.
  * Attempts queued winner emails after committing final results.
  */
-function finalise_expired_auctions(): void {
+function finalise_expired_auctions(bool $processWinnerEmails = true): void {
     $pdo=db();
     $now=auction_now();
     $pdo->exec('BEGIN IMMEDIATE');
@@ -68,6 +68,12 @@ function finalise_expired_auctions(): void {
     } catch(Throwable $e) {
         try{$pdo->exec('ROLLBACK');}catch(Throwable $ignored){}
         throw $e;
+    }
+
+    // Browser-triggered finalisation prepares results only. Winner email retries remain
+    // separate and are not silently tied to the custodian's button.
+    if (!$processWinnerEmails) {
+        return;
     }
 
     // Email happens after the results transaction; failures cannot undo final results.

@@ -11,6 +11,18 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
  if(!verify_csrf(isset($_POST['csrf_token'])?(string)$_POST['csrf_token']:null)){http_response_code(400);exit('Invalid request token.');}
  $action=(string)($_POST['action']??'');$auctionId=(int)($_POST['auction_id']??0);$pdo=db();
  try{
+  if($action==='finalise_expired'){
+   if(!$canProcure)throw new RuntimeException('Only procurement/custodian can process expired auctions.');
+   $countQuery=$pdo->prepare("SELECT COUNT(*) FROM auctions WHERE status IN ('scheduled','open') AND ends_at IS NOT NULL AND ends_at<=:now");
+   $countQuery->execute(['now'=>auction_now()]);
+   $eligibleBefore=(int)$countQuery->fetchColumn();
+   finalise_expired_auctions(false);
+   $countQuery->execute(['now'=>auction_now()]);
+   $eligibleAfter=(int)$countQuery->fetchColumn();
+   $processed=max(0,$eligibleBefore-$eligibleAfter);
+   audit_log((int)$user['id'],'auction.expired_finalisation_triggered','auction','batch',['processed'=>$processed]);
+   $success=$processed>0 ? $processed.' expired auction(s) processed. Their provisional results are now in the review queue.' : 'No expired auctions needed finalisation.';
+  }else{
   $q=$pdo->prepare("SELECT * FROM auctions WHERE id=:id AND status='closed'");$q->execute(['id'=>$auctionId]);$auction=$q->fetch();
   if(!$auction)throw new RuntimeException('Choose an auction that has closed for bidding.');
   if($action==='disposition'){
@@ -54,9 +66,13 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
    audit_log((int)$user['id'],'auction.closeout_returned','auction',(string)$auctionId,['comment'=>$comment]);
    $success='Close-out returned to procurement with your notes.';
   }else{throw new RuntimeException('Unknown action.');}
+  }
  }catch(Throwable $e){$error=$e->getMessage();}
 }
 $auctions=db()->query("SELECT a.id,a.title,a.status,a.ends_at,a.results_status,a.procurement_reviewed_at,a.results_approved_at,(SELECT COUNT(*) FROM auction_results r WHERE r.auction_id=a.id) AS lots,(SELECT COUNT(*) FROM auction_results r WHERE r.auction_id=a.id AND r.result_status='sold') AS sold,(SELECT COUNT(*) FROM auction_results r WHERE r.auction_id=a.id AND r.result_status='unsold') AS unsold FROM auctions a WHERE a.status='closed' ORDER BY a.closed_at DESC,a.id DESC")->fetchAll();
+$expiredQuery=db()->prepare("SELECT COUNT(*) FROM auctions WHERE status IN ('scheduled','open') AND ends_at IS NOT NULL AND ends_at<=:now");
+$expiredQuery->execute(['now'=>auction_now()]);
+$expiredCount=(int)$expiredQuery->fetchColumn();
 $selected=null;$results=[];
 if($auctionId>0){$q=db()->prepare("SELECT * FROM auctions WHERE id=:id AND status='closed'");$q->execute(['id'=>$auctionId]);$selected=$q->fetch()?:null;
  if($selected){$q=db()->prepare("SELECT r.id AS result_id,r.result_status,r.final_price_cents,r.finalized_at,r.pending_disposition,r.relisted_item_id,i.id AS item_id,i.lot_number,i.title,i.category,i.opening_price_cents,u.display_name AS winner_name FROM auction_results r JOIN auction_items i ON i.id=r.auction_item_id LEFT JOIN users u ON u.id=r.winner_user_id WHERE r.auction_id=:id ORDER BY CAST(i.lot_number AS INTEGER),i.lot_number");$q->execute(['id'=>$auctionId]);$results=$q->fetchAll();}}
@@ -65,7 +81,8 @@ require dirname(__DIR__,2).'/app/layout.php';render_page_start('Auction close-ou
 <section class="welcome"><div><p class="eyebrow">PROCUREMENT CONTROL</p><h1>Auction close-out</h1><p class="muted">Bidding closes automatically at the deadline. Procurement reviews provisional outcomes, then a different approver releases results to staff.</p></div><div class="welcome-icon">✓</div></section>
 <?php if($error!==''): ?><div class="alert" role="alert"><?= e($error) ?></div><?php endif; ?><?php if($success!==''): ?><div class="notice"><span class="notice-dot"></span><div><strong>Update saved</strong><p><?= e($success) ?></p></div></div><?php endif; ?>
 <section class="content-panel"><div class="section-heading"><div><p class="eyebrow">CLOSED AUCTIONS</p><h2>Review queue</h2></div><span class="status-pill"><?= count($auctions) ?> auction(s)</span></div>
-<?php if(!$auctions): ?><div class="empty-state"><strong>No closed auctions</strong><p>Once an auction end time passes and the CLI finalisation job runs, it will appear here for procurement review.</p></div><?php else: ?><div class="table-wrap"><table class="data-table"><thead><tr><th>Auction</th><th>Lots</th><th>Sold</th><th>Unsold</th><th>Close-out status</th><th></th></tr></thead><tbody><?php foreach($auctions as $a): ?><tr><td><strong><?= e($a['title']) ?></strong><small class="table-sub">Closed <?= e($a['ends_at']??'') ?></small></td><td><?= (int)$a['lots'] ?></td><td><?= (int)$a['sold'] ?></td><td><?= (int)$a['unsold'] ?></td><td><span class="status-pill"><?= e(str_replace('_',' ',ucfirst((string)$a['results_status']))) ?></span></td><td><a class="text-link" href="<?= e(app_url('admin/closeout.php?auction='.(int)$a['id'])) ?>">Review →</a></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?></section>
+<?php if($canProcure): ?><div class="inline-form" style="justify-content:space-between;margin:0 0 1rem"><p class="form-help"><?= $expiredCount>0 ? $expiredCount.' expired auction(s) ready to process.' : 'No expired auctions are waiting to be processed.' ?></p><?php if($expiredCount>0): ?><form method="post" onsubmit="return confirm('Process all expired auctions now? This records provisional results and closes them for bidding.');"><input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="action" value="finalise_expired"><button class="button button-primary" type="submit">Process expired auctions →</button></form><?php endif; ?></div><?php endif; ?>
+<?php if(!$auctions): ?><div class="empty-state"><strong>No closed auctions yet</strong><p>When an auction passes its end time, a procurement user or custodian can click “Process expired auctions” above to prepare its provisional results.</p></div><?php else: ?><div class="table-wrap"><table class="data-table"><thead><tr><th>Auction</th><th>Lots</th><th>Sold</th><th>Unsold</th><th>Close-out status</th><th></th></tr></thead><tbody><?php foreach($auctions as $a): ?><tr><td><strong><?= e($a['title']) ?></strong><small class="table-sub">Closed <?= e($a['ends_at']??'') ?></small></td><td><?= (int)$a['lots'] ?></td><td><?= (int)$a['sold'] ?></td><td><?= (int)$a['unsold'] ?></td><td><span class="status-pill"><?= e(str_replace('_',' ',ucfirst((string)$a['results_status']))) ?></span></td><td><a class="text-link" href="<?= e(app_url('admin/closeout.php?auction='.(int)$a['id'])) ?>">Review →</a></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?></section>
 <?php if($selected): ?>
 <section class="content-panel"><div class="section-heading"><div><p class="eyebrow">PROVISIONAL RESULTS</p><h2><?= e($selected['title']) ?></h2><p class="muted">Status: <?= e(str_replace('_',' ',(string)$selected['results_status'])) ?> · Finalised lots are not visible to employees until release.</p></div><span class="status-pill"><?= count($results) ?> lot(s)</span></div>
 <?php if(in_array((string)$selected['results_status'],['awaiting_approval','released'],true)): ?><div class="notice"><span class="notice-dot"></span><div><strong><?= $selected['results_status']==='released'?'Results released':'Awaiting independent approval' ?></strong><p>Procurement review: <?= e($selected['procurement_reviewed_at']??'—') ?>. <?= $selected['results_status']==='released'?'Released: '.e($selected['results_approved_at']??'—'):'' ?></p><?php if(!empty($selected['procurement_review_comment'])): ?><p>Procurement notes: <?= nl2br(e($selected['procurement_review_comment'])) ?></p><?php endif; ?><?php if(!empty($selected['results_approval_comment'])): ?><p>Approver notes: <?= nl2br(e($selected['results_approval_comment'])) ?></p><?php endif; ?></div></div><?php endif; ?>
