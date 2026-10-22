@@ -123,5 +123,5 @@ $pdo->exec('CREATE INDEX IF NOT EXISTS idx_users_manager_user_id ON users(manage
 $pdo->prepare('INSERT OR IGNORE INTO schema_migrations(version) VALUES(:v)')->execute(['v'=>'011_line_manager_assignment']);
 
 echo "Migrations 002–011 applied or already present. Existing data preserved.\n";
-echo "Permissions, staged approvals, password recovery, item categories, bidding and auction result storage are available.\n";
+echo "Permissions, staged approvals, assigned line managers, password recovery, item categories, bidding and auction result storage are available.\n";
 echo "Configure and test the scheduled CLI finalisation job before operational use.\n";
